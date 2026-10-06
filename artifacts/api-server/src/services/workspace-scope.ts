@@ -7,7 +7,7 @@
  * Resolve the owner + every active member so they share one agent list.
  */
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { db, agentsTable, callsTable, teamMembersTable, usersTable } from "@workspace/db";
+import { db, agentsTable, callsTable, teamMembersTable, usersTable, partnersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite, type TeamScopeRow } from "./workspace-scope-logic.js";
 
@@ -73,7 +73,11 @@ export async function resolveWorkspaceScope(clerkId: string): Promise<WorkspaceS
   await ensureTeamMembersTable();
 
   const [me] = await db
-    .select({ email: usersTable.email })
+    .select({
+      email: usersTable.email,
+      partnerId: usersTable.partnerId,
+      partnerPermissions: usersTable.partnerPermissions,
+    })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkId));
   const claimed = await claimPendingTeamInvites(clerkId, me?.email);
@@ -119,6 +123,18 @@ export async function resolveWorkspaceScope(clerkId: string): Promise<WorkspaceS
   if (!canWrite) {
     const membership = rows.find((r) => r.status === "active" && r.memberUserId === clerkId);
     canWrite = teamRoleCanWrite(membership?.role);
+  }
+
+  // If this user is managed by an active partner with read_only mode, block edits
+  if (canWrite && me?.partnerId && me.partnerPermissions?.mode === "read_only") {
+    const [partner] = await db
+      .select({ userId: partnersTable.userId })
+      .from(partnersTable)
+      .where(and(eq(partnersTable.id, me.partnerId), eq(partnersTable.status, "active")));
+    // Self-partner guard: partner themselves is the owner of their partner workspace
+    if (partner && partner.userId !== clerkId) {
+      canWrite = false;
+    }
   }
 
   const ownerUserId = isOwner

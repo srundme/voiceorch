@@ -32,6 +32,10 @@ export interface ManagingPartner {
   companyName: string;
   /** Partner granted this client permission to edit/save agents. */
   allowAgentEdit: boolean;
+  partnerPermissions?: {
+    navVisibility?: Record<string, boolean>;
+    mode?: "full" | "read_only";
+  } | null;
 }
 
 /** The ACTIVE partner managing this client, or null when unmanaged. */
@@ -42,6 +46,7 @@ export async function getManagingPartner(clientClerkId: string): Promise<Managin
       partnerUserId: partnersTable.userId,
       companyName: partnersTable.companyName,
       allowAgentEdit: usersTable.partnerAllowAgentEdit,
+      partnerPermissions: usersTable.partnerPermissions,
     })
     .from(usersTable)
     .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
@@ -137,13 +142,49 @@ export function denyManagedClient(req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * @deprecated Managed clients always have full agent edit. Prefer no gate,
- * or `denyManagedClient` only for partner-reserved ops (phones / topup).
+ * Denies mutating requests (POST, PUT, PATCH, DELETE) when a managed client's
+ * partner permissions are configured with `mode: "read_only"`.
+ * Partners acting on behalf of the client (via x-client-context) are exempted.
+ */
+export function denyReadOnlyClient(req: Request, res: Response, next: NextFunction): void {
+  void (async () => {
+    // A partner acting for their client is always allowed through.
+    if ((req as unknown as { actingPartnerClerkId?: string }).actingPartnerClerkId) {
+      next();
+      return;
+    }
+    const method = req.method.toUpperCase();
+    if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+      next();
+      return;
+    }
+    const clerkId = (req as unknown as { clerkUserId?: string }).clerkUserId;
+    if (!clerkId) {
+      next();
+      return;
+    }
+    const partner = await getManagingPartner(clerkId);
+    if (partner && partner.partnerUserId !== clerkId && partner.partnerPermissions?.mode === "read_only") {
+      res.status(403).json({
+        error: `Your workspace is set to read-only mode by ${partner.companyName}. You cannot make edits.`,
+        code: "READ_ONLY_MODE",
+      });
+      return;
+    }
+    next();
+  })().catch((err) => {
+    req.log?.error({ err }, "denyReadOnlyClient middleware failed");
+    res.status(500).json({ error: "Internal server error" });
+  });
+}
+
+/**
+ * Guard routes that allow normal managed client edits, but block clients in read_only mode.
  */
 export function denyManagedClientUnlessAgentEdit(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  next();
+  denyReadOnlyClient(req, res, next);
 }

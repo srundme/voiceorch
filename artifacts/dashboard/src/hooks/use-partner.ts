@@ -113,3 +113,15 @@ export function usePartnerManagedWorkspace() {
     actingAs,
   };
 }
+
+/**
+ * True when the active user is a managed client whose partner set permissions mode to "read_only".
+ * When a partner is acting-as this client, actingAs is non-null so this returns false (allowing partner edits).
+ */
+export function useIsPartnerReadOnly(): boolean {
+  const { data: partnerCtx } = usePartnerContext();
+  const actingAs = loadActingAs();
+  if (actingAs) return false;
+  return partnerCtx?.isManagedClient === true && partnerCtx?.partnerPermissions?.mode === "read_only";
+}
+

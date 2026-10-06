@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
+  Handshake, Users, UserPlus, User, Wallet, TrendingUp, Clock, Mail,
   Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy, PhoneCall,
   Shield, Eye, Lock, Sparkles, ShieldAlert, MoreHorizontal,
 } from "lucide-react";
@@ -507,6 +507,70 @@ function statusBadge(status: string) {
   }
 }
 
+function ReferralLinkCard({ me, description }: { me: PartnerMe; description?: string }) {
+  const { toast } = useToast();
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-medium">Your Affiliate / Referral Link</h2>
+        </div>
+        {me.referralCode && (
+          <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
+            Code: {me.referralCode}
+          </Badge>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {description || "Share your referral link or code with prospective clients. When they sign up on SnapServe, they are automatically tracked as your referred users."}
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <Input
+          readOnly
+          value={me.referralLink || ""}
+          placeholder="Configure your referral code in Settings to activate your link"
+          className="font-mono text-xs bg-muted/30"
+        />
+        <div className="flex gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!me.referralLink}
+            onClick={async () => {
+              if (!me.referralLink) return;
+              try {
+                await navigator.clipboard.writeText(me.referralLink);
+                toast({ title: "Referral link copied!", description: me.referralLink });
+              } catch {
+                toast({ title: "Failed to copy link" });
+              }
+            }}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
+          </Button>
+          {me.referralCode && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(me.referralCode!);
+                  toast({ title: "Referral code copied!", description: me.referralCode! });
+                } catch {
+                  toast({ title: "Failed to copy code" });
+                }
+              }}
+            >
+              Copy Code
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function PartnerPage() {
@@ -520,7 +584,7 @@ export default function PartnerPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-4 animate-pulse">
+      <div className="p-6 w-full max-w-5xl mx-auto space-y-4 animate-pulse">
         <div className="h-7 w-48 rounded bg-muted" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[0, 1, 2, 3].map(i => <div key={i} className="h-24 rounded-xl bg-muted" />)}
@@ -543,7 +607,7 @@ export default function PartnerPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 w-full max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -584,7 +648,6 @@ export default function PartnerPage() {
 
 function OverviewTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
-  const { toast } = useToast();
   const { data } = useQuery<{ entries: EarningEntry[] }>({
     queryKey: ["partner-earnings"],
     queryFn: () => partnerFetch<{ entries: EarningEntry[] }>(getToken, "/api/partner/earnings"),
@@ -602,61 +665,7 @@ function OverviewTab({ me }: { me: PartnerMe }) {
       </div>
 
       {/* Referral & Affiliate Share Card */}
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-medium">Your Affiliate / Referral Link</h2>
-          </div>
-          {me.referralCode && (
-            <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
-              Code: {me.referralCode}
-            </Badge>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Share your referral link or code with prospective clients. When they sign up on SnapServe, they are automatically tracked as your referred users.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input
-            readOnly
-            value={me.referralLink}
-            className="font-mono text-xs bg-muted/30"
-          />
-          <div className="flex gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(me.referralLink);
-                  toast({ title: "Referral link copied!", description: me.referralLink });
-                } catch {
-                  toast({ title: "Failed to copy link" });
-                }
-              }}
-            >
-              <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
-            </Button>
-            {me.referralCode && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(me.referralCode!);
-                    toast({ title: "Referral code copied!", description: me.referralCode! });
-                  } catch {
-                    toast({ title: "Failed to copy code" });
-                  }
-                }}
-              >
-                Copy Code
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      <ReferralLinkCard me={me} />
 
       <div className="rounded-xl border border-border bg-card">
         <div className="px-4 py-3 border-b border-border">
@@ -843,25 +852,26 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   return (
     <div className="rounded-xl border border-border bg-card">
       <div className="px-5 py-4 border-b border-border flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
+        <div className="space-y-0.5">
           <h2 className="text-sm font-semibold text-foreground">Your clients</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs text-muted-foreground">
             Create accounts with email + password. Clients sign in on your branded login page.
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/80 text-xs font-medium text-muted-foreground">
-            <span className="size-2 rounded-full bg-primary shrink-0" />
-            <span className="text-foreground font-semibold">{me.allocatedConcurrency ?? 0}/{me.concurrentLimit ?? 10}</span>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <div className="h-8 px-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+            <span className="size-1.5 rounded-full bg-primary shrink-0" />
+            <span className="text-foreground font-semibold tabular-nums">{me.allocatedConcurrency ?? 0}/{me.concurrentLimit ?? 10}</span>
             <span>Lines Used</span>
             {Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0)) > 0 && (
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold ml-0.5">
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold ml-0.5">
                 ({Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} free)
               </span>
             )}
           </div>
-          <div className="px-3 py-1 rounded-full bg-muted/60 border border-border/80 text-xs text-muted-foreground font-medium">
-            Base <span className="font-semibold text-foreground">{inr(baseRate)}/min</span>
+          <div className="h-8 px-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground flex items-center gap-1 font-medium">
+            <span>Base</span>
+            <span className="font-semibold text-foreground tabular-nums">{inr(baseRate)}/min</span>
           </div>
           <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm" onClick={() => {
             const available = Math.max(1, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0));
@@ -899,20 +909,13 @@ function ClientsTab({ me }: { me: PartnerMe }) {
               {clients.map(c => {
                 const marginCents = c.rateCentsPerMin - baseRate;
                 const displayName = c.name || c.email || c.clerkId;
-                const initials = (c.name || c.email || "C")
-                  .trim()
-                  .split(/[\s@._-]+/)
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map(p => p[0]?.toUpperCase() ?? "")
-                  .join("") || "C";
 
                 return (
                   <tr key={c.clerkId} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
-                          {initials}
+                        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
+                          <User className="size-4 text-primary" />
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium text-foreground truncate max-w-[200px]">
@@ -1309,40 +1312,10 @@ function InvitesTab({ me }: { me: PartnerMe }) {
   return (
     <div className="space-y-5">
       {/* Referral Link Quick Banner */}
-      <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-medium">Walk-in Referral Link</h2>
-          </div>
-          {me.referralCode && (
-            <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5">
-              Code: {me.referralCode}
-            </Badge>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Clients who sign up via your link or enter your referral code will appear below under Referral Signups.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Input readOnly value={me.referralLink} className="font-mono text-xs bg-muted/30" />
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(me.referralLink);
-                toast({ title: "Referral link copied!" });
-              } catch {
-                toast({ title: "Failed to copy link" });
-              }
-            }}
-          >
-            <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Link
-          </Button>
-        </div>
-      </div>
+      <ReferralLinkCard
+        me={me}
+        description="Clients who sign up via your link or enter your referral code will appear below under Referral Signups."
+      />
 
       {/* Direct Invitations */}
       <div className="rounded-xl border border-border bg-card">

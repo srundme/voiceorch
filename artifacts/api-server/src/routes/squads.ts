@@ -22,7 +22,7 @@ import {
   type SquadStatus,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext } from "../middlewares/clientContext.js";
+import { clientContext, denyReadOnlyClient } from "../middlewares/clientContext.js";
 import { logger } from "../lib/logger.js";
 import {
   startTaskRun,
@@ -33,6 +33,8 @@ import {
 } from "../services/squad-engine.js";
 
 const router: IRouter = Router();
+
+router.use(requireAuth, clientContext, denyReadOnlyClient);
 
 const TEMPLATES = [
   {
