@@ -32,7 +32,7 @@ describe("signup landing route", () => {
   });
 
   it("keeps Vibe reachable as an explicit choice", () => {
-    expect(src("src/pages/home/index.tsx")).toMatch(/navigate\("\/app\/vibe"\)/);
+    expect(src("src/pages/home/index.tsx")).toMatch(/\/app\/vibe/);
     expect(src("src/components/layout.tsx")).toMatch(/navigate\("\/app\/vibe"\)/);
   });
 

@@ -12,11 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import {
   Handshake, Users, UserPlus, Wallet, TrendingUp, Clock, Mail,
   Trash2, IndianRupee, ArrowRightLeft, Upload, X, Settings2, Globe, Link2, CheckCircle2, Copy, LifeBuoy, PhoneCall,
-  Shield, Eye, Lock, Sparkles, ShieldAlert,
+  Shield, Eye, Lock, Sparkles, ShieldAlert, MoreHorizontal,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -839,24 +842,28 @@ function ClientsTab({ me }: { me: PartnerMe }) {
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+      <div className="px-5 py-4 border-b border-border flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium">Your clients</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Create accounts with email + password. Clients sign in on your branded login page (no Google).
+          <h2 className="text-sm font-semibold text-foreground">Your clients</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Create accounts with email + password. Clients sign in on your branded login page.
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right hidden sm:block">
-            <span className="text-[11px] text-muted-foreground block">
-              Pool: <span className="font-semibold text-foreground">{me.allocatedConcurrency ?? 0}</span> / {me.concurrentLimit ?? 10} lines allocated
-            </span>
-            <span className="text-[10px] text-muted-foreground">
-              {Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} lines available
-            </span>
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/60 border border-border/80 text-xs font-medium text-muted-foreground">
+            <span className="size-2 rounded-full bg-primary shrink-0" />
+            <span className="text-foreground font-semibold">{me.allocatedConcurrency ?? 0}/{me.concurrentLimit ?? 10}</span>
+            <span>Lines Used</span>
+            {Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0)) > 0 && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold ml-0.5">
+                ({Math.max(0, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0))} free)
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-muted-foreground">Base {inr(baseRate)}/min</span>
-          <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => {
+          <div className="px-3 py-1 rounded-full bg-muted/60 border border-border/80 text-xs text-muted-foreground font-medium">
+            Base <span className="font-semibold text-foreground">{inr(baseRate)}/min</span>
+          </div>
+          <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm" onClick={() => {
             const available = Math.max(1, (me.concurrentLimit ?? 10) - (me.allocatedConcurrency ?? 0));
             setCreateConcurrencyText(String(Math.min(5, available)));
             setCreateOpen(true);
@@ -880,81 +887,131 @@ function ClientsTab({ me }: { me: PartnerMe }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
-                <th className="px-4 py-2 font-medium">Client</th>
-                <th className="px-3 py-2 font-medium">Balance</th>
-                <th className="px-3 py-2 font-medium">Rate</th>
-                <th className="px-3 py-2 font-medium">Concurrency</th>
-                <th className="px-3 py-2 font-medium">This month</th>
-                <th className="px-3 py-2 font-medium text-right">Actions</th>
+                <th className="px-4 py-3 font-medium">Client</th>
+                <th className="px-3 py-3 font-medium">Balance</th>
+                <th className="px-3 py-3 font-medium">Rate</th>
+                <th className="px-3 py-3 font-medium">Concurrency</th>
+                <th className="px-3 py-3 font-medium">This month</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {clients.map(c => (
-                <tr key={c.clerkId}>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="min-w-0">
-                        <p className="font-medium truncate max-w-[220px]">{c.name || c.email || c.clerkId}</p>
-                        {c.email && <p className="text-[11px] text-muted-foreground truncate max-w-[220px]">{c.email}</p>}
+              {clients.map(c => {
+                const marginCents = c.rateCentsPerMin - baseRate;
+                const displayName = c.name || c.email || c.clerkId;
+                const initials = (c.name || c.email || "C")
+                  .trim()
+                  .split(/[\s@._-]+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map(p => p[0]?.toUpperCase() ?? "")
+                  .join("") || "C";
+
+                return (
+                  <tr key={c.clerkId} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground truncate max-w-[200px]">
+                            {displayName}
+                          </p>
+                          {c.email && (
+                            <p className="text-[11px] text-muted-foreground truncate max-w-[200px] mt-0.5">
+                              {c.email}
+                            </p>
+                          )}
+                        </div>
+                        {c.loginLocked && (
+                          <Badge variant="destructive" className="shrink-0 text-[10px] font-normal">Locked</Badge>
+                        )}
                       </div>
-                      {c.loginLocked && (
-                        <Badge variant="destructive" className="shrink-0 text-[10px]">Login locked</Badge>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 tabular-nums">{inr(c.walletBalanceCents)}</td>
-                  <td className="px-3 py-2.5 tabular-nums">{inr(c.rateCentsPerMin)}/min</td>
-                  <td className="px-3 py-2.5 tabular-nums">
-                    <span className="font-medium">{c.concurrentLimit ?? 10}</span>
-                    <span className="text-muted-foreground text-[11px] ml-1">lines</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className="tabular-nums">{toMins(c.monthSeconds)} min</span>
-                    <span className="text-muted-foreground text-[11px]"> · {c.monthCalls} calls · {inr(c.monthSpendCents)}</span>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      {c.loginLocked && (
+                    </td>
+                    <td className="px-3 py-3 tabular-nums font-semibold text-foreground">
+                      {inr(c.walletBalanceCents)}
+                    </td>
+                    <td className="px-3 py-3 tabular-nums">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-foreground">{inr(c.rateCentsPerMin)}/min</span>
+                        {marginCents > 0 && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            +{inr(marginCents)} margin
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 tabular-nums">
+                      <Badge variant="outline" className="font-mono text-[11px] font-normal bg-background">
+                        {c.concurrentLimit ?? 10} lines
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium tabular-nums text-foreground">{toMins(c.monthSeconds)} min</p>
+                      <p className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
+                        {c.monthCalls} calls · {inr(c.monthSpendCents)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 justify-end">
                         <Button
                           size="sm"
-                          variant="secondary"
-                          className="h-7 px-2.5 text-xs"
-                          disabled={unlockMutation.isPending}
-                          onClick={() => unlockMutation.mutate(c.clerkId)}
+                          variant="outline"
+                          className="h-8 px-3 text-xs font-medium border-border/80 hover:bg-muted"
+                          title="Open client ops — rate, fund, numbers"
+                          onClick={() => navigate(`/app/partner/clients/${encodeURIComponent(c.clerkId)}`)}
                         >
-                          Unlock login
+                          Manage
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        className="h-7 px-2.5 text-xs"
-                        title="Open client ops — rate, fund, numbers"
-                        onClick={() => navigate(`/app/partner/clients/${encodeURIComponent(c.clerkId)}`)}
-                      >
-                        <Settings2 className="w-3 h-3 mr-1" /> Client ops
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
-                        <IndianRupee className="w-3 h-3 mr-1" /> Rate
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        title="Set concurrent call lines for this client"
-                        onClick={() => { setConcurrencyClient(c); setConcurrencyText(String(c.concurrentLimit ?? 10)); }}>
-                        <PhoneCall className="w-3 h-3 mr-1" /> Lines
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        title="Configure feature access & permissions for this client"
-                        onClick={() => setPermissionsClient(c)}>
-                        <Shield className="w-3 h-3 mr-1" /> Access
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
-                        onClick={() => { setTransferClient(c); setAmountText(""); }}>
-                        <ArrowRightLeft className="w-3 h-3 mr-1" /> Transfer
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                              <span className="sr-only">Client actions</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => { setTransferClient(c); setAmountText(""); }}>
+                              <ArrowRightLeft className="w-3.5 h-3.5 mr-2" />
+                              Transfer funds
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setRateClient(c); setRateText((c.rateCentsPerMin / 100).toFixed(2)); }}>
+                              <IndianRupee className="w-3.5 h-3.5 mr-2" />
+                              Edit rate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setConcurrencyClient(c); setConcurrencyText(String(c.concurrentLimit ?? 10)); }}>
+                              <PhoneCall className="w-3.5 h-3.5 mr-2" />
+                              Adjust lines
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setPermissionsClient(c)}>
+                              <Shield className="w-3.5 h-3.5 mr-2" />
+                              Access & features
+                            </DropdownMenuItem>
+                            {c.loginLocked && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-amber-600 focus:text-amber-600"
+                                  disabled={unlockMutation.isPending}
+                                  onClick={() => unlockMutation.mutate(c.clerkId)}
+                                >
+                                  <Lock className="w-3.5 h-3.5 mr-2" />
+                                  Unlock login
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

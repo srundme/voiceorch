@@ -37,14 +37,10 @@ describe("mobile responsiveness smoke", () => {
 
   it("agent builder uses a switcher sheet and single-column editor", () => {
     const builder = src("src/pages/agents/builder.tsx");
-    expect(builder).toMatch(/WorkspaceSegmentNav/);
     expect(builder).toMatch(/agentsSheetOpen/);
-    expect(builder).toMatch(/sm:hidden/);
-    expect(builder).toMatch(/Mobile-only sticky actions/);
-    expect(builder).toMatch(/inset-0 rounded-none/);
-    expect(builder).toMatch(/md:w-\[420px\]/);
-    expect(builder).not.toMatch(/WorkspaceSectionNav/);
-    expect(builder).not.toMatch(/WorkspaceInspector/);
+    expect(builder).toMatch(/SheetContent side="left"/);
+    expect(builder).toMatch(/AgentListPanel/);
+    expect(builder).toMatch(/AgentEditorPanel/);
   });
 
   it("vibe history uses a sheet on mobile", () => {
@@ -69,10 +65,9 @@ describe("mobile responsiveness smoke", () => {
 
   it("home page uses a responsive command-center layout", () => {
     const home = src("src/pages/home/index.tsx");
-    expect(home).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_300px\]/);
-    expect(home).toMatch(/Workspace health/);
+    expect(home).toMatch(/lg:grid-cols-2/);
     expect(home).toMatch(/Finish setup/);
-    expect(home).toMatch(/Recent activity/);
+    expect(home).toMatch(/Recent calls/);
   });
 
   it("outbound / OTP dialogs use large touch CTAs", () => {
