@@ -62,7 +62,10 @@ function rejectReadOnly(
   canWrite: boolean,
 ): boolean {
   if (canWrite) return false;
-  res.status(403).json({ error: "Your team role cannot edit agents" });
+  res.status(403).json({
+    error: "Your account is in read-only mode. Editing agents is disabled.",
+    code: "READ_ONLY_MODE",
+  });
   return true;
 }
 

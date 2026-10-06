@@ -11,7 +11,7 @@ import {
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
-  Target, ListChecks, GripVertical,
+  Target, ListChecks, GripVertical, Lock,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { motion } from "framer-motion";
@@ -104,7 +104,7 @@ import {
 import { GhostEmpty } from "@/components/brand-moments";
 import { hostProductName } from "@/lib/white-label";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
-import { usePartnerManagedWorkspace, useAgentLimit } from "@/hooks/use-partner";
+import { usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS, ASR_PROVIDERS,
@@ -4944,6 +4944,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
   const [search, setSearch] = useState("");
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const isReadOnly = useIsPartnerReadOnly();
   const { toast } = useToast();
   const { data: agents, isLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
   const { teamByAgentId } = useAgentTeamMap();
@@ -4952,6 +4953,10 @@ function AgentListPanel({ selectedId, onSelect, className }: {
 
   const handleDeleteItem = async (e: React.MouseEvent, agentId: number, name: string) => {
     e.stopPropagation();
+    if (isReadOnly) {
+      toast({ title: "Read-Only Mode", description: "You cannot delete agents in read-only mode.", variant: "destructive" });
+      return;
+    }
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
       setDeletingId(agentId);
@@ -4987,7 +4992,14 @@ function AgentListPanel({ selectedId, onSelect, className }: {
       <div className="space-y-3 border-b border-border/70 p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Agents</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Agents</p>
+              {isReadOnly && (
+                <span className="inline-flex items-center gap-1 text-[9px] font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30">
+                  <Lock className="size-2.5" /> Read-only
+                </span>
+              )}
+            </div>
             <p className="text-[12px] text-muted-foreground">
               {isLoading ? "…" : `${totalCount} total · ${liveCount} live`}
             </p>
@@ -5015,10 +5027,12 @@ function AgentListPanel({ selectedId, onSelect, className }: {
             description={
               search
                 ? "Try a different name or clear the search."
-                : "Build the voice agent first, then attach it to a campaign."
+                : isReadOnly
+                  ? "No agents configured in this workspace yet."
+                  : "Build the voice agent first, then attach it to a campaign."
             }
             action={
-              search
+              search || isReadOnly
                 ? undefined
                 : isManagedWorkspace
                   ? {
@@ -5032,7 +5046,7 @@ function AgentListPanel({ selectedId, onSelect, className }: {
                   }
             }
             secondaryAction={
-              search || isManagedWorkspace
+              search || isManagedWorkspace || isReadOnly
                 ? undefined
                 : {
                     label: "Configure manually",
@@ -5075,16 +5089,18 @@ function AgentListPanel({ selectedId, onSelect, className }: {
                   </p>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={(e) => handleDeleteItem(e, agent.id, agent.name)}
-                disabled={deletingId === agent.id}
-                className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                title={`Delete ${agent.name}`}
-                aria-label={`Delete ${agent.name}`}
-              >
-                <Trash2 className="size-3" />
-              </button>
+              {!isReadOnly && (
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteItem(e, agent.id, agent.name)}
+                  disabled={deletingId === agent.id}
+                  className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  title={`Delete ${agent.name}`}
+                  aria-label={`Delete ${agent.name}`}
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              )}
             </button>
           );
         })}
@@ -7617,6 +7633,7 @@ function VersionsTab({ agentId }: { agentId: number }) {
 export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId: number; onOpenAgents?: () => void; embedded?: boolean }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const isReadOnly = useIsPartnerReadOnly();
   const search = useSearch();
   const [activeTab, setActiveTab] = useState<TabId>(() => sectionFromSearch(search));
   const activeTabRef = useRef(activeTab);
@@ -7963,6 +7980,17 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   const onSave = form.handleSubmit(
     async (data) => {
       const isAutoSave = autoSaveRequestRef.current;
+      if (isReadOnly) {
+        if (isAutoSave) setAutoSaveStatus("idle");
+        else {
+          toast({
+            title: "Read-Only Mode",
+            description: "Your account is set to read-only mode by your partner. Changes cannot be saved.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
       if (loadedAgentIdRef.current !== agentId) {
         if (isAutoSave) setAutoSaveStatus("idle");
         return;
@@ -8113,7 +8141,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
       await autoSaveHandlerRef.current?.();
     };
     const subscription = form.watch((value, { name }) => {
-      if (suppressAutoSaveRef.current) return;
+      if (suppressAutoSaveRef.current || isReadOnly) return;
       // Do not auto-save for Conversation Flow:
       // Wait for user to finish editing/reordering flow steps and explicitly click "Save now".
       const isFlowField =
@@ -8334,16 +8362,30 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             <Play className="size-3.5" />
             {showWebcall ? "Close test" : "Live test"}
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            className={cn("h-8 gap-1.5 px-3.5 text-[11px] font-medium", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
-            onClick={onSave}
-            disabled={updateAgent.isPending}
-          >
-            {savedFlash ? <Check className="size-3.5" /> : <Save className="size-3.5" />}
-            {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save now"}
-          </Button>
+          {isReadOnly ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 px-3.5 text-[11px] font-medium border-amber-500/40 text-amber-700 dark:text-amber-300 opacity-80 cursor-not-allowed"
+              disabled
+              title="Your account is in read-only mode"
+            >
+              <Lock className="size-3.5" />
+              Read-Only
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className={cn("h-8 gap-1.5 px-3.5 text-[11px] font-medium", savedFlash && "bg-emerald-600 text-white hover:bg-emerald-600")}
+              onClick={onSave}
+              disabled={updateAgent.isPending}
+            >
+              {savedFlash ? <Check className="size-3.5" /> : <Save className="size-3.5" />}
+              {updateAgent.isPending ? "Saving…" : savedFlash ? "Saved" : "Save now"}
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button type="button" size="icon" variant="ghost" className="size-8">
@@ -8357,19 +8399,21 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
                 <Mic className="mr-2 size-3.5" /> Live test
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                if (isDirty) {
-                  toast({
-                    title: "Save changes first",
-                    description: "Publish snapshots the saved agent configuration.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                setPublishModalOpen(true);
-              }}>
-                <Upload className="mr-2 size-3.5" /> Publish version
-              </DropdownMenuItem>
+              {!isReadOnly && (
+                <DropdownMenuItem onClick={() => {
+                  if (isDirty) {
+                    toast({
+                      title: "Save changes first",
+                      description: "Publish snapshots the saved agent configuration.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setPublishModalOpen(true);
+                }}>
+                  <Upload className="mr-2 size-3.5" /> Publish version
+                </DropdownMenuItem>
+              )}
               {!isManagedWorkspace && !embedded && (
               <DropdownMenuItem onClick={() => navigate(`/app/vibe?refine=${agentId}`)}>
                 <Sparkles className="mr-2 size-3.5" /> Refine with AI
@@ -8380,13 +8424,16 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
                 <Star className="mr-2 size-3.5" /> API keys
               </DropdownMenuItem>
               )}
-              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                <Trash2 className="mr-2 size-3.5" /> Delete agent
-              </DropdownMenuItem>
+              {!isReadOnly && (
+                <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
+                  <Trash2 className="mr-2 size-3.5" /> Delete agent
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
+
 
       <AgentTeamChromeBar agentId={agentId} section={activeTab} />
 
@@ -8813,6 +8860,7 @@ function AgentTeamStrip({ agentId, compact }: { agentId: number; compact?: boole
 function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; onClose: () => void; onLimitReached?: (limit: number | null) => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const isReadOnly = useIsPartnerReadOnly();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [step, setStep] = useState<"compose" | "surfaces" | "name">("compose");
@@ -8884,6 +8932,10 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
   };
 
   const handleCreate = async () => {
+    if (isReadOnly) {
+      setCreateError("Your account is in read-only mode. Creating agents is disabled.");
+      return;
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -9026,6 +9078,12 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className={cn("gap-0 overflow-hidden p-0 sm:max-w-md", composition === "team" && step === "name" && "sm:max-w-lg")}>
+        {isReadOnly && (
+          <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+            <Lock className="size-3.5 shrink-0" />
+            <span>Your account is in read-only mode. Creating new agents is disabled.</span>
+          </div>
+        )}
         <div className="border-b border-border px-6 pb-4 pt-6">
           <DialogHeader className="space-y-1.5 text-left">
             <DialogTitle className="text-[17px] font-semibold tracking-[-0.03em]">{stepTitle}</DialogTitle>
@@ -9160,8 +9218,8 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
-              <Button onClick={() => void handleCreate()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create agent"}
+              <Button onClick={() => void handleCreate()} disabled={creating || isReadOnly}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : isReadOnly ? "Read-Only" : "Create agent"}
               </Button>
             </DialogFooter>
           </div>
@@ -9258,8 +9316,8 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
             {createError && <p className="text-xs text-destructive">{createError}</p>}
             <DialogFooter className="gap-2 sm:justify-between">
               <Button variant="ghost" onClick={() => setStep("surfaces")} disabled={creating}>Back</Button>
-              <Button onClick={() => void handleCreate()} disabled={creating}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create team"}
+              <Button onClick={() => void handleCreate()} disabled={creating || isReadOnly}>
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : isReadOnly ? "Read-Only" : "Create team"}
               </Button>
             </DialogFooter>
           </div>
@@ -9273,15 +9331,24 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
 function StudioEmptyCanvas({ onCreate }: { onCreate: () => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const isReadOnly = useIsPartnerReadOnly();
   return (
     <div className="flex flex-1 items-center justify-center bg-background p-8">
       <GhostEmpty
         className="w-full max-w-md"
         title="Select an agent"
-        description="Pick one from the list, or create a new agent for phone — or phone plus meetings."
-        primary={{ label: "New agent", onClick: onCreate, icon: <Plus className="size-3.5" /> }}
+        description={
+          isReadOnly
+            ? "Your account is in read-only mode. Select an agent from the list to view its configuration."
+            : "Pick one from the list, or create a new agent for phone — or phone plus meetings."
+        }
+        primary={
+          !isReadOnly
+            ? { label: "New agent", onClick: onCreate, icon: <Plus className="size-3.5" /> }
+            : undefined
+        }
         secondary={
-          !isManagedWorkspace
+          !isManagedWorkspace && !isReadOnly
             ? { label: "Build with AI", onClick: () => navigate("/app/vibe") }
             : undefined
         }
@@ -9297,6 +9364,7 @@ const LAST_AGENT_ID_KEY = "voiceorch:lastAgentId";
 export default function AgentBuilder() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
+  const isReadOnly = useIsPartnerReadOnly();
   const rateMap = useMinuteRatesMap();
   const isMobile = useIsMobile();
   const { data: agents, isLoading: agentsLoading } = useListAgents({ query: { queryKey: getListAgentsQueryKey() } });
@@ -9325,14 +9393,15 @@ export default function AgentBuilder() {
   // ?create=1 (sidebar / mobile bottom-nav "New agent" → Manual Build).
   const searchString = useSearch();
   const [showCreate, setShowCreate] = useState(() => {
+    if (isReadOnly) return false;
     try {
       return !isAgentLimitReached && new URLSearchParams(window.location.search).get("create") === "1";
     } catch {
       return false;
     }
   });
-
   const handleCreate = () => {
+    if (isReadOnly) return;
     if (isAgentLimitReached) {
       setLimitModalOpen(true);
       return;
@@ -9350,17 +9419,18 @@ export default function AgentBuilder() {
       sp.delete("create");
       const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
       window.history.replaceState(null, "", next);
+      if (isReadOnly) return;
       if (isAgentLimitReached) {
         setLimitModalOpen(true);
       } else {
         setShowCreate(true);
       }
     } catch { /* ignore */ }
-  }, [searchString, isAgentLimitReached]);
+  }, [searchString, isReadOnly, isAgentLimitReached]);
 
   useEffect(() => {
     try {
-      if (isAgentLimitReached && new URLSearchParams(window.location.search).get("create") === "1") {
+      if (!isReadOnly && isAgentLimitReached && new URLSearchParams(window.location.search).get("create") === "1") {
         setLimitModalOpen(true);
         const sp = new URLSearchParams(window.location.search);
         sp.delete("create");
@@ -9368,7 +9438,7 @@ export default function AgentBuilder() {
         window.history.replaceState(null, "", next);
       }
     } catch { /* ignore */ }
-  }, [isAgentLimitReached]);
+  }, [isAgentLimitReached, isReadOnly]);
 
   // /app/agents opens Studio and lands on last (or first) agent — no gallery hub.
   // Deferred while the create dialog is open: the redirect swaps route

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getAuth } from "../lib/auth-compat.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { clientContext } from "../middlewares/clientContext.js";
+import { clientContext, denyReadOnlyClient } from "../middlewares/clientContext.js";
 import { randomUUID } from "crypto";
 import {
   CreateCampaignBody,
@@ -17,7 +17,7 @@ import { normalizeAfterCallBranchesInput } from "../services/campaign-after-call
 
 const router: IRouter = Router();
 
-router.use(requireAuth, clientContext);
+router.use(requireAuth, clientContext, denyReadOnlyClient);
 
 /**
  * Hard platform ceiling on how many concurrent calls a single campaign may run.

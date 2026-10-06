@@ -14,7 +14,7 @@ export default function WalletTabPage() {
       title="Billing"
       description={
         isManagedWorkspace
-          ? `Partner-funded balance · rate set by ${partnerName}`
+          ? `Account balance and calling usage managed by ${partnerName}.`
           : "Wallet balance, rate, and usage."
       }
       defaultTab="wallet"

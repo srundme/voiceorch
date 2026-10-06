@@ -331,7 +331,7 @@ export default function HomePage() {
               balanceCents != null
                 ? `₹${(balanceCents / 100).toFixed(0)} wallet`
                 : isManagedWorkspace
-                  ? "Partner-funded"
+                  ? "Managed credits"
                   : "Top up to dial"
             }
             icon={<Clock className="size-4" />}
@@ -622,7 +622,6 @@ export default function HomePage() {
                   <p className="text-[11px] text-muted-foreground">
                     ₹{(balanceCents / 100).toFixed(0)}
                     {availableMinutes != null ? ` · ~${availableMinutes} min` : ""}
-                    {isManagedWorkspace ? " · partner-funded" : ""}
                   </p>
                 </div>
                 <ArrowRight className="size-3 text-muted-foreground/40" />

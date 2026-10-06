@@ -36,7 +36,7 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext, usePartnerManagedWorkspace, useAgentLimit, type PartnerPermissions } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit, type PartnerPermissions } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -155,8 +155,8 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 const NAV_SETTINGS: NavItem[] = [
-  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Providers", href: "/app/providers?tab=provider-keys", icon: ProvidersIcon },
   { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
@@ -195,8 +195,8 @@ const MANAGED_NAV_GROUPS: NavGroup[] = [
 ];
 
 const MANAGED_NAV_SETTINGS: NavItem[] = [
-  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Workspace", href: "/app/settings", icon: WorkspaceIcon },
+  { name: "Developers", href: "/app/api-keys", icon: DevelopersIcon },
   { name: "Billing", href: "/app/wallet", icon: BillingIcon },
 ];
 
@@ -550,6 +550,7 @@ function SidebarContent({
 
   // Partner hub nav (gated) + white-label branding for partner-managed clients.
   const { data: partnerCtx } = usePartnerContext();
+  const isReadOnly = useIsPartnerReadOnly();
   const actingAsClient = loadActingAs();
   const clientSurface = partnerCtx?.isManagedClient === true || !!actingAsClient;
   const rawNavGroups: NavGroup[] = clientSurface
@@ -661,20 +662,22 @@ function SidebarContent({
       </div>
 
       {/* + New agent CTA */}
-      <div className="shrink-0 px-2 pb-2">
-        <button
-          type="button"
-          onClick={() => { onNavClick?.(); onNewAgent?.(); }}
-          title={collapsed ? "New agent" : undefined}
-          className={cn(
-            "flex h-9 w-full cursor-pointer select-none items-center rounded-md bg-primary text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
-            collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
-          )}
-        >
-          <Plus className="size-4 shrink-0" />
-          {!collapsed && <span>New agent</span>}
-        </button>
-      </div>
+      {!isReadOnly && (
+        <div className="shrink-0 px-2 pb-2">
+          <button
+            type="button"
+            onClick={() => { onNavClick?.(); onNewAgent?.(); }}
+            title={collapsed ? "New agent" : undefined}
+            className={cn(
+              "flex h-9 w-full cursor-pointer select-none items-center rounded-md bg-primary text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+              collapsed ? "justify-center px-0" : "gap-2.5 px-2.5"
+            )}
+          >
+            <Plus className="size-4 shrink-0" />
+            {!collapsed && <span>New agent</span>}
+          </button>
+        </div>
+      )}
 
       {/* Primary nav — scrollbar hidden for sleek collapsed icons */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1 scrollbar-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -801,7 +804,8 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
 
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   const [location] = useLocation();
-  const items = [...MOBILE_BOTTOM_NAV_ITEMS];
+  const isReadOnly = useIsPartnerReadOnly();
+  const items = MOBILE_BOTTOM_NAV_ITEMS.filter((item) => !isReadOnly || item.href !== null);
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
@@ -841,6 +845,7 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
 function NewAgentModal({ open, onClose, onLimitReached }: { open: boolean; onClose: () => void; onLimitReached?: () => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
+  const isReadOnly = useIsPartnerReadOnly();
   const { isLimitReached } = useAgentLimit();
 
   const goManual = () => {
@@ -860,6 +865,24 @@ function NewAgentModal({ open, onClose, onLimitReached }: { open: boolean; onClo
     }
     navigate("/app/vibe");
   };
+
+  if (isReadOnly) {
+    return (
+      <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Read-Only Mode</DialogTitle>
+          </DialogHeader>
+          <p className="text-[13px] text-muted-foreground -mt-1">
+            Your managing partner has set your account to read-only mode. Creating new agents is disabled.
+          </p>
+          <Button variant="outline" className="w-full mt-2" onClick={onClose}>
+            Close
+          </Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
