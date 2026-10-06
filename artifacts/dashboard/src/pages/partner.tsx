@@ -2041,6 +2041,7 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
   const { getToken } = useAuth();
   const { toast } = useToast();
   const [copiedLink, setCopiedLink] = useState(false);
+  const [giftModalOpen, setGiftModalOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery<PartnerReferralsData>({
@@ -2119,86 +2120,95 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
         </div>
       </div>
 
-      {/* ─── 5,000 Minutes Recurring Milestone Cycle Card ──────────────────── */}
+      {/* ─── Simplified Milestone Card with Animated Gift Box ───────────────── */}
       <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-card via-card to-primary/[0.04] p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-foreground">
-                  {targetMinutes.toLocaleString()}-Minute Milestone Cycle
-                </h3>
-                <Badge variant="outline" className="border-primary/40 text-primary font-mono text-[10px] px-2 py-0.5">
-                  Cycle #{completedCycles + 1}
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground">
+                Milestone Reward
+              </h3>
+              <Badge variant="outline" className="border-primary/40 text-primary font-mono text-[10px] px-2 py-0.5">
+                Cycle #{completedCycles + 1}
+              </Badge>
+              {completedCycles > 0 && (
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 text-[10px]">
+                  {completedCycles} Claimed
                 </Badge>
-                {completedCycles > 0 && (
-                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 text-[10px]">
-                    {completedCycles} Completed
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Every time your referred audience purchases a combined {targetMinutes.toLocaleString()} minutes,{" "}
-                <span className="text-foreground font-medium">{rewardMinutes} free minutes ({inr(rewardPaise)})</span>{" "}
-                are credited to your wallet and the cycle resets!
-              </p>
+              )}
             </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Earn <span className="text-foreground font-medium">{rewardMinutes} free minutes ({inr(rewardPaise)})</span> for every {targetMinutes.toLocaleString()} audience minutes.
+            </p>
           </div>
-          <div className="text-left sm:text-right sm:self-center bg-muted/30 p-2.5 rounded-xl border border-border/60">
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider block font-medium">
-              Next Reward
-            </span>
-            <span className="text-lg font-bold text-emerald-500 tabular-nums">
-              +{rewardMinutes} Minutes <span className="text-xs font-normal text-muted-foreground">({inr(rewardPaise)})</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Reward:</span>
+            <span className="text-sm font-bold text-emerald-500 tabular-nums bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
+              +{rewardMinutes} Mins ({inr(rewardPaise)})
             </span>
           </div>
         </div>
 
-        {/* Milestone Progress Bar: 0 / 5,000 minutes */}
-        <div className="space-y-2 bg-card p-4 rounded-xl border border-border">
+        {/* Milestone Progress Bar with Animated Gift Box at the End */}
+        <div className="space-y-3 bg-card p-4 rounded-xl border border-border">
           <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-foreground tabular-nums">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold text-foreground tabular-nums">
                 {currentCycleMins.toLocaleString()}
               </span>
-              <span className="text-base text-muted-foreground font-normal">
-                / {targetMinutes.toLocaleString()} minutes
+              <span className="text-xs text-muted-foreground font-normal">
+                / {targetMinutes.toLocaleString()} mins
               </span>
             </div>
-            <div className="text-right">
-              <span className="text-sm font-semibold text-primary tabular-nums">
-                {cyclePercent}% Complete
-              </span>
-              <span className="block text-[11px] text-muted-foreground">
-                {Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} mins to next reward
-              </span>
-            </div>
-          </div>
-
-          <div className="w-full bg-muted rounded-full h-3 overflow-hidden border border-border/60">
-            <div
-              className="h-full transition-all duration-700 rounded-full bg-gradient-to-r from-primary to-emerald-500"
-              style={{ width: `${cyclePercent}%` }}
-            />
-          </div>
-
-          <div className="flex justify-between text-[11px] text-muted-foreground pt-1">
-            <span>0 minutes (Cycle start)</span>
-            <span className="font-medium text-foreground">
-              {currentCycleMins} of {targetMinutes} mins reached in Cycle #{completedCycles + 1}
+            <span className="text-xs font-semibold text-primary tabular-nums">
+              {cyclePercent}% Complete · {Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} mins to gift
             </span>
-            <span>{targetMinutes.toLocaleString()} minutes goal</span>
+          </div>
+
+          {/* Progress bar + Gift Box row */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden border border-border/60">
+              <div
+                className="h-full transition-all duration-700 rounded-full bg-gradient-to-r from-primary to-emerald-500"
+                style={{ width: `${cyclePercent}%` }}
+              />
+            </div>
+
+            {/* Wobbling Gift Box Button */}
+            <button
+              type="button"
+              onClick={() => setGiftModalOpen(true)}
+              className="relative group p-2 rounded-xl bg-gradient-to-br from-amber-500/15 to-emerald-500/15 border border-amber-500/30 hover:border-amber-500/70 hover:scale-105 transition-all cursor-pointer shrink-0 shadow-xs"
+              title="Click to open reward gift box"
+            >
+              <div className="gift-wobble">
+                <Gift className="w-5 h-5 text-amber-500 group-hover:text-amber-400 transition-colors" />
+              </div>
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+            </button>
+          </div>
+
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>0 mins</span>
+            <button
+              type="button"
+              onClick={() => setGiftModalOpen(true)}
+              className="text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+            >
+              <span>🎁 Click gift box to view reward</span>
+            </button>
+            <span>{targetMinutes.toLocaleString()} mins</span>
           </div>
         </div>
 
         {/* Cycle History Footnote */}
         {completedCycles > 0 && (
-          <div className="text-xs text-muted-foreground bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 p-3 rounded-xl border border-emerald-500/20 flex items-center justify-between">
+          <div className="text-xs text-muted-foreground bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 p-2.5 rounded-xl border border-emerald-500/20 flex items-center justify-between">
             <span>
-              🏆 <strong>Great job!</strong> You have successfully completed {completedCycles} milestone cycle{completedCycles > 1 ? "s" : ""}.
+              🏆 <strong>{completedCycles} milestone cycle{completedCycles > 1 ? "s" : ""} completed!</strong>
             </span>
             <span className="font-semibold tabular-nums">
               Total Earned: {(completedCycles * rewardMinutes).toLocaleString()} mins ({inr(completedCycles * rewardPaise)})
@@ -2206,6 +2216,71 @@ function ReferralsTab({ me }: { me: PartnerMe }) {
           </div>
         )}
       </div>
+
+      {/* ─── Gift Box Reveal Modal ────────────────────────────────────────── */}
+      <Dialog open={giftModalOpen} onOpenChange={setGiftModalOpen}>
+        <DialogContent className="sm:max-w-md text-center p-6 space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500/20 via-emerald-500/20 to-primary/20 border border-amber-500/30 flex items-center justify-center shadow-lg relative">
+            <div className="gift-wobble">
+              <Gift className="w-8 h-8 text-amber-500" />
+            </div>
+            <Sparkles className="w-4 h-4 text-emerald-500 absolute -top-1 -right-1 animate-pulse" />
+          </div>
+
+          <div>
+            <DialogTitle className="text-lg font-bold text-foreground">
+              Milestone Reward Gift Box
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {cyclePercent >= 100
+                ? "Milestone completed! Your free minutes have been credited."
+                : "Earn 5,000 audience minutes to unlock this reward."}
+            </DialogDescription>
+          </div>
+
+          {/* Reward contents box */}
+          <div className="rounded-xl border border-border bg-muted/30 p-4 text-left space-y-2.5">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
+              <span className="text-xs text-muted-foreground font-medium">Inside This Box</span>
+              <Badge variant="outline" className="text-emerald-500 border-emerald-500/30 text-[10px]">
+                Auto-credited to Wallet
+              </Badge>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-foreground">+{rewardMinutes} Free Calling Minutes</p>
+                <p className="text-xs text-muted-foreground font-medium">{inr(rewardPaise)} value added directly to your wallet</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Progress overview */}
+          <div className="space-y-1.5 text-left text-xs bg-card p-3 rounded-xl border border-border">
+            <div className="flex justify-between font-medium">
+              <span className="text-muted-foreground">Cycle #{completedCycles + 1} Progress</span>
+              <span className="text-primary tabular-nums font-semibold">{currentCycleMins.toLocaleString()} / {targetMinutes.toLocaleString()} mins ({cyclePercent}%)</span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-500"
+                style={{ width: `${cyclePercent}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground pt-0.5">
+              {Math.max(0, targetMinutes - currentCycleMins).toLocaleString()} mins left to unlock this gift.
+            </p>
+          </div>
+
+          <DialogFooter className="sm:justify-center">
+            <Button className="w-full sm:w-auto" onClick={() => setGiftModalOpen(false)}>
+              Got it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── 4 Summary KPI Cards ────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

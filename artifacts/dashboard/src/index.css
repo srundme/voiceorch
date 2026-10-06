@@ -672,3 +672,31 @@
   }
 }
 
+@keyframes gift-wobble {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  15% {
+    transform: rotate(-14deg) scale(1.1);
+  }
+  30% {
+    transform: rotate(14deg) scale(1.1);
+  }
+  45% {
+    transform: rotate(-8deg) scale(1.05);
+  }
+  60% {
+    transform: rotate(8deg) scale(1.05);
+  }
+  75% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.gift-wobble {
+  display: inline-block;
+  animation: gift-wobble 2.4s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+
