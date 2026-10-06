@@ -46,6 +46,7 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import {
   provisionPartnerMailDomain,
   verifyPartnerMailDomain,
@@ -263,12 +264,51 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
     const isPartner = !!ownPartner && ownPartner.status === "active";
     const isManagedClient = branding !== null && !isPartner;
     const permissions = me?.partnerPermissions ?? null;
+
+    let agentLimit: number | null = null;
+    let clientLimit: number | null = null;
+    let partnerSupportEmail: string | null = null;
+
+    if (me?.partnerId) {
+      const [p] = await db
+        .select({
+          maxAgents: partnersTable.maxAgents,
+          maxClients: partnersTable.maxClients,
+          supportEmail: partnersTable.supportEmail,
+        })
+        .from(partnersTable)
+        .where(eq(partnersTable.id, me.partnerId));
+      if (p) {
+        agentLimit = p.maxAgents ?? null;
+        clientLimit = p.maxClients ?? null;
+        partnerSupportEmail = p.supportEmail ?? null;
+      }
+    } else if (ownPartner) {
+      agentLimit = ownPartner.maxAgents ?? null;
+      clientLimit = ownPartner.maxClients ?? null;
+      partnerSupportEmail = ownPartner.supportEmail ?? null;
+    }
+
+    let agentCount = 0;
+    if (agentLimit !== null) {
+      const scope = await resolveWorkspaceScope(clerkId);
+      const [countResult] = await db
+        .select({ count: count() })
+        .from(agentsTable)
+        .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
+      agentCount = Number(countResult?.count ?? 0);
+    }
+
     res.json({
       isPartner,
       branding,
       isManagedClient,
       partnerPermissions: permissions,
       canEditAgents: isManagedClient ? (permissions?.mode !== "read_only") : false,
+      agentLimit,
+      agentCount,
+      clientLimit,
+      partnerSupportEmail,
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
@@ -355,6 +395,8 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
       defaultClientRateCentsPerMin: partner.defaultClientRateCentsPerMin,
       concurrentLimit: partner.concurrentLimit ?? 10,
       allocatedConcurrency,
+      maxAgents: partner.maxAgents ?? null,
+      maxClients: partner.maxClients ?? null,
       logoUrl: logoPathFor(partner),
       loginTitle: partner.loginTitle ?? null,
       loginSubtitle: partner.loginSubtitle ?? null,

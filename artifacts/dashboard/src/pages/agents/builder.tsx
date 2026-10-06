@@ -104,7 +104,7 @@ import {
 import { GhostEmpty } from "@/components/brand-moments";
 import { hostProductName } from "@/lib/white-label";
 import { findBySchedulingId, normalizeSchedulingId } from "@/lib/scheduling-setup";
-import { usePartnerManagedWorkspace, useIsPartnerReadOnly } from "@/hooks/use-partner";
+import { usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import {
   LLM_PROVIDERS, TTS_PROVIDERS, ASR_PROVIDERS,
@@ -8921,8 +8921,9 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
     },
   });
 
-  const handleClose = () => {
-    if (creating) return;
+  const handleClose = (force = false) => {
+    if (creating && !force) return;
+    setCreating(false);
     setStep("compose");
     setComposition("single");
     setSurfaces("phone");
@@ -8964,7 +8965,7 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
           const errorCode = err?.data?.errorCode || err?.errorCode;
           const limitVal = err?.data?.limit ?? err?.limit;
           if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
-            handleClose();
+            handleClose(true);
             onLimitReached?.(limitVal ?? null);
             return;
           }
@@ -8982,7 +8983,7 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
           const errorCode = err?.data?.errorCode || err?.errorCode;
           const limitVal = err?.data?.limit ?? err?.limit;
           if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
-            handleClose();
+            handleClose(true);
             onLimitReached?.(limitVal ?? null);
             return;
           }
@@ -9058,7 +9059,7 @@ function CreateAgentDialog({ open, onClose, onLimitReached }: { open: boolean; o
       const errorCode = err?.data?.errorCode || err?.errorCode;
       const limitVal = err?.data?.limit ?? err?.limit;
       if (errorCode === "AGENT_LIMIT_REACHED" || String(err?.message || "").includes("Agent limit reached")) {
-        handleClose();
+        handleClose(true);
         onLimitReached?.(limitVal ?? null);
         return;
       }
@@ -9390,19 +9391,29 @@ export default function AgentBuilder() {
     try { localStorage.setItem(LAST_AGENT_ID_KEY, String(selectedId)); } catch { /* ignore */ }
   }, [selectedId]);
 
+  const { isLimitReached: isAgentLimitReached, agentLimit: contextAgentLimit, partnerSupportEmail } = useAgentLimit();
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [agentLimit, setAgentLimit] = useState<number | null>(null);
+
+  const effectiveLimit = agentLimit ?? contextAgentLimit;
+
   // Create-agent dialog. Opened by StudioEmptyCanvas, or requested via
   // ?create=1 (sidebar / mobile bottom-nav "New agent" → Manual Build).
   const searchString = useSearch();
   const [showCreate, setShowCreate] = useState(() => {
     if (isReadOnly) return false;
     try {
-      return new URLSearchParams(window.location.search).get("create") === "1";
+      return !isAgentLimitReached && new URLSearchParams(window.location.search).get("create") === "1";
     } catch {
       return false;
     }
   });
   const handleCreate = () => {
     if (isReadOnly) return;
+    if (isAgentLimitReached) {
+      setLimitModalOpen(true);
+      return;
+    }
     setShowCreate(true);
   };
 
@@ -9413,12 +9424,29 @@ export default function AgentBuilder() {
     try {
       const sp = new URLSearchParams(searchString);
       if (sp.get("create") !== "1") return;
-      if (!isReadOnly) setShowCreate(true);
       sp.delete("create");
       const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
       window.history.replaceState(null, "", next);
+      if (isReadOnly) return;
+      if (isAgentLimitReached) {
+        setLimitModalOpen(true);
+      } else {
+        setShowCreate(true);
+      }
     } catch { /* ignore */ }
-  }, [searchString, isReadOnly]);
+  }, [searchString, isReadOnly, isAgentLimitReached]);
+
+  useEffect(() => {
+    try {
+      if (!isReadOnly && isAgentLimitReached && new URLSearchParams(window.location.search).get("create") === "1") {
+        setLimitModalOpen(true);
+        const sp = new URLSearchParams(window.location.search);
+        sp.delete("create");
+        const next = sp.toString() ? `?${sp.toString()}` : window.location.pathname;
+        window.history.replaceState(null, "", next);
+      }
+    } catch { /* ignore */ }
+  }, [isAgentLimitReached, isReadOnly]);
 
   // /app/agents opens Studio and lands on last (or first) agent — no gallery hub.
   // Deferred while the create dialog is open: the redirect swaps route
@@ -9455,9 +9483,6 @@ export default function AgentBuilder() {
     }
   }, [isMobile, selectedId, agentsLoading, agents, showCreate]);
 
-  const [limitModalOpen, setLimitModalOpen] = useState(false);
-  const [agentLimit, setAgentLimit] = useState<number | null>(null);
-
   return (
     <div className="flex h-full overflow-hidden bg-background">
       <CreateAgentDialog
@@ -9472,7 +9497,8 @@ export default function AgentBuilder() {
         open={limitModalOpen}
         onClose={() => setLimitModalOpen(false)}
         type="agent"
-        limit={agentLimit}
+        limit={effectiveLimit}
+        partnerSupportEmail={partnerSupportEmail}
       />
       <Sheet open={agentsSheetOpen} onOpenChange={setAgentsSheetOpen}>
         <SheetContent side="left" className="w-[min(100vw,300px)] p-0 [&>button]:hidden">

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { loadActingAs } from "@/lib/acting-as";
+import { useListAgents } from "@workspace/api-client-react";
 
 export interface NavVisibility {
   agents?: boolean;
@@ -47,6 +48,10 @@ export interface PartnerContext {
   canEditAgents?: boolean;
   /** Granular feature & action permissions set by partner for this client. */
   partnerPermissions?: PartnerPermissions | null;
+  agentLimit?: number | null;
+  agentCount?: number;
+  clientLimit?: number | null;
+  partnerSupportEmail?: string | null;
 }
 
 /**
@@ -125,3 +130,22 @@ export function useIsPartnerReadOnly(): boolean {
   return partnerCtx?.isManagedClient === true && partnerCtx?.partnerPermissions?.mode === "read_only";
 }
 
+/**
+ * Real-time agent limit check hook.
+ * Computes whether the current workspace has reached its partner agent limit.
+ */
+export function useAgentLimit() {
+  const { data: partnerCtx } = usePartnerContext();
+  const { data: agents } = useListAgents();
+
+  const agentLimit = partnerCtx?.agentLimit ?? null;
+  const currentCount = agents ? agents.filter((a: any) => !a.isTestPersona).length : (partnerCtx?.agentCount ?? 0);
+  const isLimitReached = agentLimit !== null && currentCount >= agentLimit;
+
+  return {
+    agentLimit,
+    currentCount,
+    isLimitReached,
+    partnerSupportEmail: partnerCtx?.partnerSupportEmail ?? partnerCtx?.branding?.supportEmail ?? null,
+  };
+}
