@@ -11192,11 +11192,12 @@ export class OrchestrationPipeline implements VoiceSession {
     // Call 8745: empty content (no tokens). Call 12705: tokens streamed but they
     // were a hallucinated <tool_call> that TTS filters stripped, so First Token
     // fired and this recovery used to skip (llmFirstTokenAt !== null) — dead air,
-    // caller saying "hello". Recover whenever NOTHING was queued to speak.
+    // caller saying "hello". Recover whenever no reply text was queued to speak;
+    // a backchannel filler in the queue is not a reply.
     if (
       !cleanResponse.trim()
       && !triggeredToolName
-      && sentenceQueue.length === 0
+      && !firstSpeakableEnqueued
       && !this.bargeInRequested
       && !this.closed
     ) {
