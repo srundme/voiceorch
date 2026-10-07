@@ -266,6 +266,9 @@ export async function createPipeline(userId: string, input: CreatePipelineInput)
 
 async function ensureCampaign(pipeline: SheetAutoCallPipeline): Promise<number> {
   if (pipeline.campaignId) return pipeline.campaignId;
+  if (pipeline.status === "stopped") {
+    throw new Error(`Cannot ensure campaign for stopped pipeline ${pipeline.id}`);
+  }
 
   const [campaign] = await db.insert(campaignsTable).values({
     userId: pipeline.userId,
@@ -442,7 +445,11 @@ export async function processSheetRows(
     pipeline.spreadsheetId,
     pipeline.sheetName,
   );
-  const campaignId = await ensureCampaign(pipeline);
+  if (!pipeline.campaignId) {
+    logger.warn({ pipelineId: pipeline.id }, "sheet-auto-call: processSheetRows skipped, no campaign linked");
+    return { enqueued: 0, skipped: 0, lastRow: lastDataRow, cursorRowIndex: pipeline.cursorRowIndex };
+  }
+  const campaignId = pipeline.campaignId;
   const statusHeader =
     (pipeline.sameSheetStatusColumns as SheetAutoStatusColumns | null)?.status ?? "Status";
 
@@ -729,6 +736,28 @@ export async function pollOnce(pipelineId: string): Promise<void> {
     ))
     .limit(1);
   if (!pipeline) return;
+
+  if (!pipeline.campaignId) {
+    logger.info({ pipelineId }, "sheet-auto-call: linked campaign missing, stopping pipeline");
+    await db.update(sheetAutoCallPipelinesTable)
+      .set({ status: "stopped", lastError: "Linked campaign was deleted", updatedAt: new Date() })
+      .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
+    return;
+  }
+
+  const [existingCamp] = await db
+    .select({ id: campaignsTable.id })
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, pipeline.campaignId))
+    .limit(1);
+
+  if (!existingCamp) {
+    logger.info({ pipelineId, campaignId: pipeline.campaignId }, "sheet-auto-call: linked campaign deleted from db, stopping pipeline");
+    await db.update(sheetAutoCallPipelinesTable)
+      .set({ status: "stopped", campaignId: null, lastError: "Linked campaign was deleted", updatedAt: new Date() })
+      .where(eq(sheetAutoCallPipelinesTable.id, pipelineId));
+    return;
+  }
 
   try {
     const result = await processSheetRows(pipeline, {

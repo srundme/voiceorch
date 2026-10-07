@@ -19,7 +19,7 @@ import {
   agentsTable,
   callBookingsTable,
 } from "@workspace/db";
-import { eq, and, gte, lt, inArray, count, desc } from "drizzle-orm";
+import { eq, and, gte, lt, inArray, count, desc, ne } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 
 const router = Router();
@@ -120,7 +120,7 @@ router.get("/campaigns/dashboard", async (req, res): Promise<void> => {
   let campaigns: (typeof campaignsTable.$inferSelect)[];
   try {
     campaigns = await db.select().from(campaignsTable)
-      .where(eq(campaignsTable.userId, userId))
+      .where(and(eq(campaignsTable.userId, userId), ne(campaignsTable.leadSource, "workflow")))
       .orderBy(desc(campaignsTable.createdAt));
   } catch (err) {
     req.log.error({ err }, "campaign-dashboard: failed to fetch campaigns");

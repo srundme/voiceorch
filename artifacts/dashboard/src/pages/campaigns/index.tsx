@@ -1511,13 +1511,31 @@ export default function CampaignsPage() {
 
   async function handleDelete() {
     if (!deleting || deleteNameInput.trim() !== deleting.name) return;
+    const campaignIdToDelete = deleting.id;
+    const wasActive = deleting.status === "active";
     setDeletingCamp(true);
     try {
-      await deleteMutation.mutateAsync({ id: deleting.id });
+      // Optimistically remove from React Query cache immediately so UI reflects deletion
+      qc.setQueryData<DashboardData>(["campaigns-dashboard"], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          campaigns: old.campaigns.filter((c) => c.id !== campaignIdToDelete),
+          stats: {
+            ...old.stats,
+            activeCampaigns: Math.max(0, old.stats.activeCampaigns - (wasActive ? 1 : 0)),
+          },
+        };
+      });
+
+      await deleteMutation.mutateAsync({ id: campaignIdToDelete });
+      // Cancel in-flight background query that might have started before deletion
+      await qc.cancelQueries({ queryKey: ["campaigns-dashboard"] });
       await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
       toast({ title: "Campaign deleted" });
     } catch {
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       toast({ title: "Failed to delete campaign", variant: "destructive" });
     } finally {
       setDeletingCamp(false);

@@ -6,7 +6,7 @@ import {
   getListCampaignBatchesQueryKey, getGetCampaignQueryKey, getGetCampaignAnalyticsQueryKey,
   getGetBatchAnalyticsQueryOptions,
   useListCrmConnections, useUpdateCrmConnection, getListCrmConnectionsQueryKey,
-  customFetch,
+  customFetch, getListCampaignsQueryKey,
 } from "@workspace/api-client-react";
 import type { CrmConnection } from "@workspace/api-client-react";
 import { CrmImportDialog } from "../connections";
@@ -871,12 +871,27 @@ export default function CampaignDetailPage() {
 
   async function handleDeleteCampaign() {
     if (deleteNameInput.trim() !== campaign?.name) return;
+    const cid = campaignId;
     setDeletingCamp(true);
     try {
-      await deleteCampaign.mutateAsync({ id: campaignId });
+      // Optimistically remove from React Query dashboard cache
+      qc.setQueryData<any>(["campaigns-dashboard"], (old: any) => {
+        if (!old || !Array.isArray(old.campaigns)) return old;
+        return {
+          ...old,
+          campaigns: old.campaigns.filter((c: any) => c.id !== cid),
+        };
+      });
+
+      await deleteCampaign.mutateAsync({ id: cid });
+      await qc.cancelQueries({ queryKey: ["campaigns-dashboard"] });
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
+      await qc.invalidateQueries({ queryKey: getListCampaignsQueryKey() });
+
       toast({ title: "Campaign deleted" });
       setLocation("/app/campaigns");
     } catch {
+      await qc.invalidateQueries({ queryKey: ["campaigns-dashboard"] });
       toast({ title: "Failed to delete campaign", variant: "destructive" });
       setDeletingCamp(false);
     }

@@ -7,7 +7,23 @@ import {
   CreateCampaignBody,
   UpdateCampaignBody,
 } from "@workspace/api-zod";
-import { db, campaignsTable, campaignLeadsTable, callsTable, agentsTable, providersTable, platformSettingsTable, campaignConsentBasisTable, phoneNumbersTable, type CampaignFieldMappings } from "@workspace/db";
+import {
+  db,
+  campaignsTable,
+  campaignLeadsTable,
+  callsTable,
+  agentsTable,
+  providersTable,
+  platformSettingsTable,
+  campaignConsentBasisTable,
+  phoneNumbersTable,
+  sheetAutoCallPipelinesTable,
+  crmConnectionsTable,
+  squadRunsTable,
+  campaignReportDefinitionsTable,
+  campaignBatchesTable,
+  type CampaignFieldMappings,
+} from "@workspace/db";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import { eq, and, count, desc, inArray, isNull, ne } from "drizzle-orm";
 import { scheduleCampaignCall } from "../orchestration/campaignCaller.js";
@@ -506,12 +522,72 @@ router.delete("/campaigns/:id", async (req, res): Promise<void> => {
 
   const id = parseInt(req.params["id"]!, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid campaign ID" }); return; }
-  const deleted = await db.delete(campaignsTable)
-    .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)))
-    .returning();
 
-  if (!deleted.length) { res.status(404).json({ error: "Not found" }); return; }
-  res.status(204).end();
+  try {
+    const deleted = await db.transaction(async (tx) => {
+      // 1. Verify existence and ownership
+      const [existing] = await tx
+        .select({ id: campaignsTable.id, name: campaignsTable.name })
+        .from(campaignsTable)
+        .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)));
+
+      if (!existing) return null;
+
+      // 2. Stop and detach any sheet auto-call pipelines linked to this campaign.
+      // Crucial: stopping the pipeline prevents startSheetAutoCallPoller from
+      // running ensureCampaign() and resurrecting the campaign every 30 seconds!
+      await tx
+        .update(sheetAutoCallPipelinesTable)
+        .set({
+          status: "stopped",
+          campaignId: null,
+          lastError: "Linked campaign was deleted",
+          updatedAt: new Date(),
+        })
+        .where(eq(sheetAutoCallPipelinesTable.campaignId, id));
+
+      // 3. Detach CRM connections
+      await tx
+        .update(crmConnectionsTable)
+        .set({ webhookCampaignId: null, updatedAt: new Date() })
+        .where(eq(crmConnectionsTable.webhookCampaignId, id));
+
+      // 4. Detach squad runs
+      await tx
+        .update(squadRunsTable)
+        .set({ campaignId: null })
+        .where(eq(squadRunsTable.campaignId, id));
+
+      // 5. Clean up child records that might lack automatic cascade in PG
+      await tx
+        .delete(campaignConsentBasisTable)
+        .where(eq(campaignConsentBasisTable.campaignId, id));
+
+      await tx
+        .delete(campaignReportDefinitionsTable)
+        .where(eq(campaignReportDefinitionsTable.campaignId, id));
+
+      // 6. Cancel any running batches
+      await tx
+        .update(campaignBatchesTable)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(and(eq(campaignBatchesTable.campaignId, id), eq(campaignBatchesTable.status, "running")));
+
+      // 7. Perform the campaign deletion
+      const [removed] = await tx
+        .delete(campaignsTable)
+        .where(and(eq(campaignsTable.id, id), eq(campaignsTable.userId, userId)))
+        .returning();
+
+      return removed;
+    });
+
+    if (!deleted) { res.status(404).json({ error: "Not found" }); return; }
+    res.status(204).end();
+  } catch (err) {
+    req.log.error({ err, campaignId: id, userId }, "Failed to delete campaign");
+    res.status(500).json({ error: "Failed to delete campaign" });
+  }
 });
 
 // ── GET /campaigns/:id/consent-basis ───────────────────────────────────────
