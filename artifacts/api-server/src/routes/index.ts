@@ -30,6 +30,7 @@ import whatsappNativeRouter from "./whatsapp-native.js";
 import whatsappExtrasRouter from "./whatsapp-extras.js";
 import partnerRouter from "./partner.js";
 import partnerPublicRouter from "./partner-public.js";
+import starPremiumPublicRouter from "./star-premium-public.js";
 import adminEmailsRouter from "./admin-emails.js";
 import adminFinanceAnalyticsRouter from "./admin-finance-analytics.js";
 import adminBoardAnalyticsRouter from "./admin-board-analytics.js";
@@ -214,6 +215,10 @@ router.use(schedulingRouter);
 // routers (blanket requireAuth) or custom-domain /sign-in fetches 401 and the
 // page falls back to SnapServe chrome.
 router.use(partnerPublicRouter);
+
+// Star Health premium lookup for voice-agent webhook tools — unauthenticated,
+// same mount-order constraint as above.
+router.use(starPremiumPublicRouter);
 
 router.use(storageRouter);
 router.use(provisionUser);
