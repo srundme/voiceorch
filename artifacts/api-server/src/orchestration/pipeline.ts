@@ -10303,7 +10303,9 @@ export class OrchestrationPipeline implements VoiceSession {
               alreadyAsked: asked,
             })
           : "";
-        const openingNudge = this.callDirection === "outbound" && Date.now() < this.openingHandshakeUntil
+        const openingNudge = this.callDirection === "outbound"
+          && this.agent.openingHandshakeEnabled !== false
+          && Date.now() < this.openingHandshakeUntil
           ? buildOpeningHandshakeNudge(lastTurn.content, prevLine)
           : "";
         const whereFromNudge = buildWhereFromNudge(lastTurn.content);

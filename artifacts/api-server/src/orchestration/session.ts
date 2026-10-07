@@ -628,6 +628,7 @@ export async function createSession(params: {
     language: effectiveAgentLang,
     languageAutoDetect: isMultilingual,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
+    openingHandshakeEnabled: agentCfg["openingHandshakeEnabled"] !== false,
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     backchannelFillers: parseBackchannelPhrases(agent.backchannelPhrases),

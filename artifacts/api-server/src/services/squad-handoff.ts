@@ -235,6 +235,7 @@ async function buildTargetAgentConfig(
     language: effectiveAgentLang,
     languageAutoDetect: agentCfg["languageMode"] === "multilingual" || agentCfg["languageAutoDetect"] === true,
     autoSwitchToEnglish: agentCfg["autoSwitchToEnglish"] === true,
+    openingHandshakeEnabled: agentCfg["openingHandshakeEnabled"] !== false,
     backchannelingEnabled: agent.backchannelingEnabled !== false,
     backchannelingFrequency: agent.backchannelingFrequency ?? null,
     backchannelFillers: parseBackchannelPhrases(agent.backchannelPhrases),

@@ -352,6 +352,9 @@ export interface AgentConfig {
    *  strict single-language mode (languageAutoDetect=false): the pipeline latches
    *  English and injects a per-turn OVERRIDE so the LLM replies in English. */
   autoSwitchToEnglish: boolean;
+  /** Outbound first-30s [OPENING HANDSHAKE] nudges (name + "can we talk?").
+   *  False for agents whose script forbids asking permission. Default on. */
+  openingHandshakeEnabled?: boolean;
   backchannelingEnabled: boolean;
   backchannelingFrequency: number | null;
   /** Spoken cover fillers. Empty/null uses the language default pool. */
