@@ -442,6 +442,28 @@ async function migrateCallEngineConfigs(): Promise<void> {
   }
 }
 
+/**
+ * Idempotent sync: resets normal users (not partners and not partner clients)
+ * to concurrent_limit = 1, ensuring all legacy accounts (e.g. created when default was 10/15)
+ * are aligned with the new policy.
+ */
+async function syncNormalUserConcurrency(): Promise<void> {
+  try {
+    const result = await db.execute(sql`
+      UPDATE users
+      SET concurrent_limit = 1
+      WHERE partner_id IS NULL
+        AND clerk_id NOT IN (
+          SELECT user_id FROM partners WHERE user_id IS NOT NULL
+        )
+        AND concurrent_limit > 1;
+    `);
+    logger.info("Normal user concurrency limits verified and set to 1");
+  } catch (err) {
+    logger.warn({ err }, "syncNormalUserConcurrency failed (non-fatal)");
+  }
+}
+
 async function seedManagedKeyFromEnv(dbKey: string, envVar: string): Promise<void> {
   const envKey = (process.env[envVar] ?? "").trim();
   if (!envKey) return;
@@ -621,6 +643,7 @@ server.listen(port, () => {
       void migrateSaarikaToSaaras();
       void migrateCallEngineConfigs();
       void ensureReferralSchema();
+      void syncNormalUserConcurrency();
       void import("./services/ai-test-calls/runner.js")
         .then(({ recoverTestRuns }) => recoverTestRuns())
         .catch((err) => logger.warn({ err }, "AI test call run recovery failed (non-fatal)"));

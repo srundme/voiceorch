@@ -960,6 +960,13 @@
       "when": 1791600036000,
       "tag": "0136_referral_minute_milestones",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1791600037000,
+      "tag": "0137_reset_normal_user_concurrency",
+      "breakpoints": true
     }
   ]
 }

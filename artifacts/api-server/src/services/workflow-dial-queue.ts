@@ -52,11 +52,24 @@ export async function getUserConcurrentLimit(clerkUserId: string): Promise<numbe
   }
 
   const [user] = await db
-    .select({ concurrentLimit: usersTable.concurrentLimit })
+    .select({
+      concurrentLimit: usersTable.concurrentLimit,
+      partnerId: usersTable.partnerId,
+    })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkUserId))
     .limit(1);
-  const n = user?.concurrentLimit ?? DEFAULT_CONCURRENT_LIMIT;
+
+  if (!user) return DEFAULT_CONCURRENT_LIMIT;
+
+  // Partner's client: limit decided by Partner (allocated from partner pool) or Admin
+  if (user.partnerId != null) {
+    const n = user.concurrentLimit;
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : DEFAULT_CONCURRENT_LIMIT;
+  }
+
+  // Normal user (not a partner, not a partner client): default user concurrency (1)
+  const n = user.concurrentLimit ?? DEFAULT_CONCURRENT_LIMIT;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_CONCURRENT_LIMIT;
 }
 
