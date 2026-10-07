@@ -518,11 +518,9 @@ function CampaignWizard({
     ? SOURCE_OPTIONS.filter(o => allowedSources.includes(o.value))
     : SOURCE_OPTIONS;
 
-  // User's account-level concurrent call ceiling (set by admin; default 10).
-  // The campaign slider caps at the lower of the account limit and the hard
-  // platform ceiling of 10 — users can never pick more than 10.
-  const CAMPAIGN_CONCURRENCY_CEILING = 10;
-  const maxConcurrency = Math.min(accountInfo?.concurrentLimit ?? 10, CAMPAIGN_CONCURRENCY_CEILING);
+  // User's account-level concurrent call ceiling (default 1 for new signups).
+  // The campaign slider caps at their available account concurrency.
+  const maxConcurrency = Math.max(1, accountInfo?.concurrentLimit ?? 1);
 
   const [step, setStep] = useState<WizardStep>(() => (initialSource ? "info" : "source"));
   const [name, setName] = useState("");
@@ -1213,11 +1211,14 @@ function CampaignFormDialog({
     activeCampaigns.filter(c => c.status === "active").map(c => c.agentId).filter(Boolean)
   );
 
+  const { data: accountInfo } = useGetAccount();
+  const availableConcurrency = Math.max(1, accountInfo?.concurrentLimit ?? 1);
+
   const [name, setName] = useState(editing?.name ?? "");
   const [desc, setDesc] = useState(editing?.description ?? "");
   const [agentId, setAgentId] = useState(editing?.agentId ? String(editing.agentId) : "");
   const [fromNum, setFromNum] = useState(editing?.fromNumber ?? "");
-  const [maxConcurrent, setMaxConcurrent] = useState(String(editing?.concurrentCallLimit ?? MAX_CONCURRENT_CALLS));
+  const [maxConcurrent, setMaxConcurrent] = useState(String(editing?.concurrentCallLimit ?? availableConcurrency));
   const leadSource = editing?.leadSource ?? "csv";
   // Preserved on save so existing per-lead field mappings aren't wiped by this quick-edit form.
   const mappings: FieldMappings = editing?.fieldMappings
@@ -1229,7 +1230,7 @@ function CampaignFormDialog({
     : DEFAULT_MAPPINGS;
 
   function reset() {
-    setName(""); setDesc(""); setAgentId(""); setFromNum(""); setMaxConcurrent(String(MAX_CONCURRENT_CALLS));
+    setName(""); setDesc(""); setAgentId(""); setFromNum(""); setMaxConcurrent(String(availableConcurrency));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1240,7 +1241,7 @@ function CampaignFormDialog({
       description: desc.trim() || undefined,
       agentId: parseInt(agentId, 10),
       fromNumber: fromNum.trim() || undefined,
-      concurrentCallLimit: Math.min(parseInt(maxConcurrent, 10) || MAX_CONCURRENT_CALLS, MAX_CONCURRENT_CALLS),
+      concurrentCallLimit: Math.min(parseInt(maxConcurrent, 10) || availableConcurrency, availableConcurrency),
       fieldMappings: { phone: mappings.phone, name: mappings.name, email: mappings.email },
     };
     try {
@@ -1308,12 +1309,14 @@ function CampaignFormDialog({
             <div className="space-y-1.5">
               <Label className="text-xs">Max Concurrent Calls</Label>
               <Input
-                type="number" min={1} max={MAX_CONCURRENT_CALLS}
+                type="number" min={1} max={availableConcurrency}
                 value={maxConcurrent}
                 onChange={e => setMaxConcurrent(e.target.value)}
                 className="h-9 text-xs"
               />
-              <p className="text-[10px] text-muted-foreground/40">Platform ceiling: {MAX_CONCURRENT_CALLS}</p>
+              <p className="text-[10px] text-muted-foreground/60">
+                Available: {availableConcurrency} {availableConcurrency === 1 ? "line" : "lines"}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Lead Source</Label>

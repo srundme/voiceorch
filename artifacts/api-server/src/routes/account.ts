@@ -49,7 +49,12 @@ router.get("/account", requireAuth, clientContext, async (req, res): Promise<voi
   const clerkId = (req as any).clerkUserId as string;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  res.json(toAccountInfo(user));
+  const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
+  const effectiveLimit = await getUserConcurrentLimit(clerkId);
+  res.json({
+    ...toAccountInfo(user),
+    concurrentLimit: effectiveLimit,
+  });
 });
 
 router.post("/account/regenerate-api-key", requireAuth, clientContext, async (req, res): Promise<void> => {

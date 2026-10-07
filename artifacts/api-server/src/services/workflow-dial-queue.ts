@@ -23,7 +23,7 @@ import { logger } from "../lib/logger.js";
 type Campaign = typeof campaignsTable.$inferSelect;
 type Batch = typeof campaignBatchesTable.$inferSelect;
 
-const DEFAULT_CONCURRENT_LIMIT = 10;
+const DEFAULT_CONCURRENT_LIMIT = Math.max(1, Number(process.env.DEFAULT_USER_CONCURRENT_LIMIT ?? 1));
 const WORKFLOW_BATCH_NAME = "__call_plan_queue";
 
 export async function getUserConcurrentLimit(clerkUserId: string): Promise<number> {

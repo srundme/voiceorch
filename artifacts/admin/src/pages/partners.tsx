@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink, Eye, Copy, Check, Gift, Lock, Unlock, TrendingUp } from "lucide-react";
+import { Plus, Pencil, Handshake, Users, Mail, Clock, X, ExternalLink, Eye, Copy, Check, Gift, Lock, Unlock, TrendingUp, PhoneCall, Wallet, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatAdminError } from "@/lib/api";
 
@@ -777,108 +777,163 @@ function PartnerDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
-          {/* Top Info Grid: Partner credentials, portal URL, referral, concurrency */}
+          {/* Top Row: 3 High-Impact KPI Stat Cards */}
+          {(() => {
+            const poolTotal = partner.concurrentLimit ?? 10;
+            const poolAllocated = partner.allocatedConcurrency ?? 0;
+            const poolFree = Math.max(0, poolTotal - poolAllocated);
+            const poolPct = poolTotal > 0 ? Math.min(100, Math.round((poolAllocated / poolTotal) * 100)) : 0;
+            const marginCents = Math.max(0, partner.defaultClientRateCentsPerMin - partner.baseRateCentsPerMin);
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Concurrency Pool */}
+                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-muted-foreground mb-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider">Concurrency Pool</span>
+                    <PhoneCall className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  </div>
+                  <div className="my-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-bold font-mono tracking-tight text-foreground">{poolFree}</span>
+                      <span className="text-xs text-muted-foreground font-medium">/ {poolTotal} free lines</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 pt-1.5 border-t border-border/40">
+                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: `${poolPct}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                      <span>{poolAllocated} allocated</span>
+                      <span>{data?.clients.length ?? partner.clientCount} clients</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Economics & Margins */}
+                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-muted-foreground mb-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider">Economics</span>
+                    <TrendingUp className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  </div>
+                  <div className="my-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-base font-bold font-mono text-foreground">{formatCentsToDollars(partner.baseRateCentsPerMin)}</span>
+                      <span className="text-xs text-muted-foreground">→</span>
+                      <span className="text-base font-bold font-mono text-emerald-500">{formatCentsToDollars(partner.defaultClientRateCentsPerMin)}</span>
+                      <span className="text-[10px] text-muted-foreground">/min</span>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground text-[10px]">Client Margin</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/30 text-emerald-600 bg-emerald-500/10 font-mono font-medium">
+                      +{formatCentsToDollars(marginCents)}/min
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* 3. Wallet & Month Earnings */}
+                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-muted-foreground mb-1">
+                    <span className="text-[11px] font-medium uppercase tracking-wider">Financials</span>
+                    <Wallet className="w-3.5 h-3.5 text-muted-foreground/70" />
+                  </div>
+                  <div className="my-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xl font-bold font-mono tracking-tight text-foreground">{formatCentsToDollars(partner.walletBalanceCents ?? 0)}</span>
+                      <span className="text-[10px] text-muted-foreground">wallet</span>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground text-[10px]">This Month</span>
+                    <span className="font-semibold text-emerald-500 font-mono text-xs">
+                      +{data ? formatCentsToDollars(data.monthEarningsCents) : "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Middle Row: 2 Clean Profile Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* User Gmail & Account */}
-            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Partner User (User Gmail)</span>
-              <p className="font-semibold text-foreground text-sm">{partner.userName || "—"}</p>
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <span className="font-mono text-xs text-muted-foreground truncate">{partner.userEmail ?? partner.userId}</span>
+            {/* Card 1: Partner Account */}
+            <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Partner Account</span>
+                <span className="text-[10px] font-mono text-muted-foreground/70">ID #{partner.id}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0">
+                  {partner.userName ? partner.userName.charAt(0) : partner.companyName.charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground text-sm truncate">{partner.userName || partner.companyName}</p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">{partner.userEmail ?? "No email set"}</p>
+                </div>
                 {partner.userEmail && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
                     onClick={() => copyToClipboard(partner.userEmail!, "User Gmail", "userEmail")}
                   >
-                    {copiedKey === "userEmail" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    {copiedKey === "userEmail" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </Button>
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground">Clerk ID: <span className="font-mono">{partner.userId}</span></p>
             </div>
 
-            {/* Portal URL */}
-            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Branded Portal URL (Users URL)</span>
-              {partner.portalUrl ? (
-                <>
-                  <div className="flex items-center justify-between gap-2 pt-1">
+            {/* Card 2: Branded Portal & Referral */}
+            <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Portal & Referral</span>
+                {partner.referralCode && (
+                  <Badge variant="outline" className="font-mono text-[10px] uppercase px-1.5 py-0 font-bold bg-muted/40">
+                    {partner.referralCode}
+                  </Badge>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {partner.portalUrl ? (
+                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-border/50 text-xs">
                     <a
                       href={partner.portalUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-mono text-xs text-primary hover:underline truncate inline-flex items-center gap-1"
+                      className="font-mono text-xs text-primary hover:underline truncate inline-flex items-center gap-1.5"
                     >
-                      {partner.portalUrl}
-                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="truncate">{partner.portalUrl}</span>
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
                     </a>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
                       onClick={() => copyToClipboard(partner.portalUrl!, "Portal URL", "portalUrl")}
                     >
                       {copiedKey === "portalUrl" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                     </Button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Custom Domain: {partner.customDomain ?? "None"} · Subdomain: {partner.slug ? `${partner.slug}.snapserve.ai` : "None"}
-                  </p>
-                </>
-              ) : (
-                <p className="text-muted-foreground pt-1 italic">No branded portal URL set</p>
-              )}
-            </div>
-
-            {/* Referral Code & Link */}
-            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referral Code & Link</span>
-              <div className="flex items-center gap-2 pt-0.5">
-                {partner.referralCode ? (
-                  <Badge variant="outline" className="font-mono text-xs uppercase px-2 py-0.5 font-bold">
-                    {partner.referralCode}
-                  </Badge>
                 ) : (
-                  <span className="text-muted-foreground italic">No code set</span>
+                  <div className="text-xs text-muted-foreground italic px-2 py-1">No custom portal URL</div>
                 )}
-                <span className="text-[11px] text-muted-foreground ml-auto">{partner.referredCount ?? 0} referred walk-ins</span>
-              </div>
-              {referralLink && (
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <span className="font-mono text-[11px] text-muted-foreground truncate">{referralLink}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
-                    onClick={() => copyToClipboard(referralLink, "Referral Link", "referralLink")}
-                  >
-                    {copiedKey === "referralLink" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Concurrency & Rates */}
-            <div className="rounded-lg border border-border bg-card p-3 space-y-1 text-xs">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Concurrency & Economics</span>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div>
-                  <span className="text-muted-foreground block text-[11px]">Concurrency Pool:</span>
-                  <span className="font-semibold text-foreground">{partner.concurrentLimit ?? 10} lines</span>
-                  <span className="text-[10px] text-muted-foreground block">{partner.allocatedConcurrency ?? 0} allocated</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground block text-[11px]">Base / Default Rate:</span>
-                  <span className="font-semibold text-foreground">
-                    {formatCentsToDollars(partner.baseRateCentsPerMin)} / {formatCentsToDollars(partner.defaultClientRateCentsPerMin)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex justify-between items-center pt-1 border-t border-border/50 text-[11px]">
-                <span className="text-muted-foreground">Wallet: <span className="font-medium text-foreground">{formatCentsToDollars(partner.walletBalanceCents ?? 0)}</span></span>
-                <span className="text-muted-foreground">Month Earnings: <span className="font-medium text-emerald-500">{data ? formatCentsToDollars(data.monthEarningsCents) : "—"}</span></span>
+                {referralLink && (
+                  <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground px-1">
+                    <span className="truncate">{partner.referredCount ?? 0} referred walk-ins</span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline font-medium"
+                      onClick={() => copyToClipboard(referralLink, "Referral Link", "referralLink")}
+                    >
+                      {copiedKey === "referralLink" ? "Copied Link!" : "Copy Referral Link"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

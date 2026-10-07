@@ -78,6 +78,7 @@ function scopeWhere(campaignId: number, batchId?: number) {
 
 async function loadReporting(opts: {
   campaignId: number;
+  userId?: string;
   batchId?: number;
   concurrentCallLimit: number;
   dispositionTaxonomy: CampaignDispositionTaxonomy;
@@ -198,7 +199,13 @@ async function loadReporting(opts: {
   const calling = canonical?.calling ?? 0;
   const queued = canonical?.queued ?? 0;
   const slotsUsed = canonical?.slotsUsed ?? (calling + talking);
-  const concurrencyLimit = opts.concurrentCallLimit;
+  let effectiveCap = opts.concurrentCallLimit;
+  if (opts.userId) {
+    const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
+    const accountLimit = await getUserConcurrentLimit(opts.userId);
+    effectiveCap = Math.min(opts.concurrentCallLimit, accountLimit);
+  }
+  const concurrencyLimit = effectiveCap;
   const platformCap = Math.max(0, Number(process.env.PLATFORM_MAX_CONCURRENT_CALLS ?? 0));
   const availableConcurrency = Math.max(0, concurrencyLimit - slotsUsed);
 
@@ -281,6 +288,7 @@ router.get("/campaigns/:id/lead-reporting", async (req, res): Promise<void> => {
 
   const payload = await loadReporting({
     campaignId,
+    userId,
     concurrentCallLimit: campaign.concurrentCallLimit ?? 20,
     dispositionTaxonomy: await loadAgentDispositionTaxonomy(campaign.agentId),
   });
@@ -302,6 +310,7 @@ router.get("/campaigns/:id/batches/:batchId/lead-reporting", async (req, res): P
 
   const payload = await loadReporting({
     campaignId,
+    userId,
     batchId,
     concurrentCallLimit: campaign.concurrentCallLimit ?? 20,
     dispositionTaxonomy: await loadAgentDispositionTaxonomy(campaign.agentId),
