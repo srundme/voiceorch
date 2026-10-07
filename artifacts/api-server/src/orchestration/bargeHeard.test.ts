@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInterruptionHint,
+  buildInterruptionInstruction,
   composeHeardWithMid,
   estimateHeardPrefix,
   joinHeardSentences,
   resolveSpokenForHistory,
 } from "./bargeHeard.js";
+
+describe("buildInterruptionInstruction", () => {
+  it("hands the unheard part back so a cut intro is finished (call 43748)", () => {
+    const s = buildInterruptionInstruction("நா பூஜா,", "Star Health Insurance சார்பா பேசுறேன்.");
+    expect(s).toContain('heard only: "நா பூஜா,"');
+    expect(s).toContain('did NOT hear: "Star Health Insurance சார்பா பேசுறேன்."');
+    expect(s).toContain("say the part they did not hear now");
+    expect(s).not.toMatch(/self-intro/);
+  });
+
+  it("falls back to answer-only guidance when nothing is left unheard", () => {
+    const s = buildInterruptionInstruction("(interrupted before a full sentence finished)", null);
+    expect(s).not.toContain("did NOT hear");
+    expect(s).toContain("answer that in one new sentence");
+  });
+});
 
 describe("joinHeardSentences", () => {
   it("joins completed sentences and drops empties", () => {

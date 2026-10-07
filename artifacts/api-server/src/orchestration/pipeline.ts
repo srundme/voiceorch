@@ -141,7 +141,7 @@ import {
 } from "./endpointing.js";
 import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart, isHardInterruptTranscript, collapseRepeatedUtterance, isStutterLoopTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
-import { buildInterruptionHint, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
+import { buildInterruptionHint, buildInterruptionInstruction, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
@@ -1010,6 +1010,8 @@ export class OrchestrationPipeline implements VoiceSession {
   private _lostTurnRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   /** Unheard remainder of a reply cut by barge-in — resumed if the "interruption" turns out to be a scrap (call 4839 dead-air). */
   private _bargedReplyRemainder: string | null = null;
+  /** Unheard tail of the barged reply, for the next turn's interruption instruction. */
+  private _interruptionUnheard: string | null = null;
   private _bargedReplyAt = 0;
   /**
    * True only while playSentence() is actively sending TTS bytes to the carrier.
@@ -4444,6 +4446,8 @@ export class OrchestrationPipeline implements VoiceSession {
 
     // A real caller turn is being accepted — any pending barged-reply remainder
     // is now stale (the caller moved the conversation on); never resume it.
+    // The LLM still needs it to finish a cut line, so hand it to the next turn.
+    if (this._bargedReplyRemainder) this._interruptionUnheard = this._bargedReplyRemainder;
     this._bargedReplyRemainder = null;
 
     // Greeting (and any other isProcessing window) can leave orphans in the queue
@@ -10235,14 +10239,11 @@ export class OrchestrationPipeline implements VoiceSession {
     if (this._interruptionHint && historyForLlm.length > 0) {
       const lastTurn = historyForLlm[historyForLlm.length - 1]!;
       if (lastTurn.role === "user") {
-        const heard = this._interruptionHint.slice(0, 300);
-        const hint =
-          `[INTERRUPTED — DO NOT RESTART] Your previous reply was cut mid-delivery. ` +
-          `The caller already heard: "${heard}". ` +
-          `Do NOT start that sentence again, and do NOT repeat those words. ` +
-          `Do NOT restart recording consent, greeting, self-intro, welcome, or sales pitch. ` +
-          `If they asked a question or stated a fact, answer that in one new sentence and stop. ` +
-          `Never ask "can you hear me" / "கேக்குதா" unless the caller explicitly said nothing at all.`;
+        const hint = buildInterruptionInstruction(
+          this._interruptionHint,
+          this._interruptionUnheard ?? this._bargedReplyRemainder,
+        );
+        this._bargedReplyRemainder = null;
         historyForLlm = [
           ...historyForLlm.slice(0, -1),
           { ...lastTurn, content: `${lastTurn.content}\n\n${hint}` },
@@ -10250,6 +10251,7 @@ export class OrchestrationPipeline implements VoiceSession {
       }
       this._interruptionHint = null;
     }
+    this._interruptionUnheard = null;
 
     // Caller reported they cannot hear the agent (usually because TTS was cut).
     // Resume the unfinished point — do NOT enter a hearing-check loop.

@@ -49,6 +49,27 @@ export function buildInterruptionHint(played: string, wasMidSentence: boolean): 
 }
 
 /**
+ * Instruction appended to the caller's turn after a barge-in. Without the
+ * unheard part, "do not restart" made the agent drop a cut intro and jump to
+ * the next script line (call 43748: intro cut by "hello", never finished).
+ */
+export function buildInterruptionInstruction(heard: string, unheard: string | null): string {
+  const h = heard.trim().slice(0, 300);
+  const u = unheard?.trim().slice(0, 300) ?? "";
+  return (
+    `[INTERRUPTED] Your previous reply was cut mid-delivery. The caller heard only: "${h}". ` +
+    (u ? `They did NOT hear: "${u}". ` : "") +
+    `Do not repeat words they already heard. ` +
+    (u
+      ? `If the caller only gave a short acknowledgement or greeting (hello, yes, okay, சொல்லுங்க), say the part they did not hear now, naturally, continuing from where you were cut. ` +
+        `If they asked a question or said something new, answer that first in one short sentence, then say the unheard part only if it still matters, such as your introduction or the question you were asking. `
+      : `If they asked a question or stated a fact, answer that in one new sentence. `) +
+    `Do not restart recording consent or the greeting. ` +
+    `Never ask "can you hear me" / "கேக்குதா" unless the caller explicitly said nothing at all.`
+  );
+}
+
+/**
  * What to store as the assistant utterance after playback.
  * On barge: only heard. Otherwise: prefer played sentences over full LLM text.
  */
