@@ -757,129 +757,128 @@ function PartnerDetailDialog({
   return (
     <Dialog open={!!partner} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="border-b border-border pb-3">
+        <DialogHeader className="border-b border-border pb-3 pr-12">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
-                <DialogTitle className="text-lg font-semibold">{partner.companyName}</DialogTitle>
+              <div className="flex items-center gap-2.5">
+                <DialogTitle className="text-xl font-bold tracking-tight text-foreground">{partner.companyName}</DialogTitle>
                 {statusBadge(partner.status)}
+                <span className="text-xs text-muted-foreground font-mono">· Partner ID #{partner.id}</span>
               </div>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Partner ID #{partner.id} · Created {fmtDate(partner.createdAt)}
+                Created on {fmtDate(partner.createdAt)}
               </DialogDescription>
             </div>
             {onEdit && (
-              <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => { onClose(); onEdit(partner); }}>
-                <Pencil className="w-3.5 h-3.5 mr-1" /> Edit Partner
+              <Button size="sm" variant="outline" className="h-8 text-xs shrink-0" onClick={() => { onClose(); onEdit(partner); }}>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Partner
               </Button>
             )}
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
-          {/* Top Row: 3 High-Impact KPI Stat Cards */}
+        <div className="space-y-4 py-3 overflow-y-auto flex-1 pr-1">
+          {/* Top Row: 3 Simple, High-Contrast Essential Cards (NO graphs) */}
           {(() => {
             const poolTotal = partner.concurrentLimit ?? 10;
             const poolAllocated = partner.allocatedConcurrency ?? 0;
             const poolFree = Math.max(0, poolTotal - poolAllocated);
-            const poolPct = poolTotal > 0 ? Math.min(100, Math.round((poolAllocated / poolTotal) * 100)) : 0;
             const marginCents = Math.max(0, partner.defaultClientRateCentsPerMin - partner.baseRateCentsPerMin);
 
             return (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* 1. Concurrency Pool */}
-                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-muted-foreground mb-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wider">Concurrency Pool</span>
-                    <PhoneCall className="w-3.5 h-3.5 text-muted-foreground/70" />
+                {/* 1. Capacity & Lines */}
+                <div className="rounded-xl border border-border/80 bg-card/70 p-4 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-xs font-semibold tracking-wide text-foreground">Capacity & Lines</span>
+                    <PhoneCall className="w-4 h-4 text-muted-foreground/70" />
                   </div>
-                  <div className="my-1">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold font-mono tracking-tight text-foreground">{poolFree}</span>
-                      <span className="text-xs text-muted-foreground font-medium">/ {poolTotal} free lines</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Total Pool:</span>
+                      <span className="font-bold font-mono text-foreground text-sm">{poolTotal} lines</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Allocated:</span>
+                      <span className="font-semibold font-mono text-foreground">{poolAllocated} lines</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Available:</span>
+                      <span className="font-bold font-mono text-emerald-400">{poolFree} lines</span>
                     </div>
                   </div>
-                  <div className="space-y-1.5 pt-1.5 border-t border-border/40">
-                    <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all"
-                        style={{ width: `${poolPct}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                      <span>{poolAllocated} allocated</span>
-                      <span>{data?.clients.length ?? partner.clientCount} clients</span>
-                    </div>
+                  <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                    Max Clients: {partner.maxClients ?? "Unlimited"} · Max Agents: {partner.maxAgents ?? "Unlimited"}
                   </div>
                 </div>
 
-                {/* 2. Economics & Margins */}
-                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-muted-foreground mb-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wider">Economics</span>
-                    <TrendingUp className="w-3.5 h-3.5 text-muted-foreground/70" />
+                {/* 2. Economics & Rates */}
+                <div className="rounded-xl border border-border/80 bg-card/70 p-4 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-xs font-semibold tracking-wide text-foreground">Economics & Rates</span>
+                    <TrendingUp className="w-4 h-4 text-muted-foreground/70" />
                   </div>
-                  <div className="my-1">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-base font-bold font-mono text-foreground">{formatCentsToDollars(partner.baseRateCentsPerMin)}</span>
-                      <span className="text-xs text-muted-foreground">→</span>
-                      <span className="text-base font-bold font-mono text-emerald-500">{formatCentsToDollars(partner.defaultClientRateCentsPerMin)}</span>
-                      <span className="text-[10px] text-muted-foreground">/min</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Platform Base:</span>
+                      <span className="font-semibold font-mono text-foreground">{formatCentsToDollars(partner.baseRateCentsPerMin)}/min</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Client Selling:</span>
+                      <span className="font-semibold font-mono text-foreground">{formatCentsToDollars(partner.defaultClientRateCentsPerMin)}/min</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Partner Margin:</span>
+                      <span className="font-bold font-mono text-emerald-400">+{formatCentsToDollars(marginCents)}/min</span>
                     </div>
                   </div>
-                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground text-[10px]">Client Margin</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/30 text-emerald-600 bg-emerald-500/10 font-mono font-medium">
-                      +{formatCentsToDollars(marginCents)}/min
-                    </Badge>
+                  <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                    Profit earned per connected client minute
                   </div>
                 </div>
 
-                {/* 3. Wallet & Month Earnings */}
-                <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between text-muted-foreground mb-1">
-                    <span className="text-[11px] font-medium uppercase tracking-wider">Financials</span>
-                    <Wallet className="w-3.5 h-3.5 text-muted-foreground/70" />
+                {/* 3. Financials */}
+                <div className="rounded-xl border border-border/80 bg-card/70 p-4 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="text-xs font-semibold tracking-wide text-foreground">Financials</span>
+                    <Wallet className="w-4 h-4 text-muted-foreground/70" />
                   </div>
-                  <div className="my-1">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-xl font-bold font-mono tracking-tight text-foreground">{formatCentsToDollars(partner.walletBalanceCents ?? 0)}</span>
-                      <span className="text-[10px] text-muted-foreground">wallet</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Wallet Balance:</span>
+                      <span className="font-bold font-mono text-foreground text-sm">{formatCentsToDollars(partner.walletBalanceCents ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Month Commission:</span>
+                      <span className="font-bold font-mono text-emerald-400">
+                        +{data ? formatCentsToDollars(data.monthEarningsCents) : "—"}
+                      </span>
                     </div>
                   </div>
-                  <div className="pt-1.5 border-t border-border/40 flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground text-[10px]">This Month</span>
-                    <span className="font-semibold text-emerald-500 font-mono text-xs">
-                      +{data ? formatCentsToDollars(data.monthEarningsCents) : "—"}
-                    </span>
+                  <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                    Prepaid wallet for platform charges
                   </div>
                 </div>
               </div>
             );
           })()}
 
-          {/* Middle Row: 2 Clean Profile Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Card 1: Partner Account */}
-            <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Partner Account</span>
-                <span className="text-[10px] font-mono text-muted-foreground/70">ID #{partner.id}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase shrink-0">
-                  {partner.userName ? partner.userName.charAt(0) : partner.companyName.charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-foreground text-sm truncate">{partner.userName || partner.companyName}</p>
-                  <p className="text-xs text-muted-foreground font-mono truncate">{partner.userEmail ?? "No email set"}</p>
-                </div>
+          {/* Middle Section: 3 Clean Info Strips */}
+          <div className="space-y-2">
+            {/* Strip 1: Account Owner */}
+            <div className="rounded-lg border border-border/70 bg-card/60 px-3.5 py-2.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-medium shrink-0 w-32">Account Owner</span>
+              <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
+                <span className="font-semibold text-foreground truncate">{partner.userName || partner.companyName}</span>
+                {partner.userEmail && (
+                  <span className="text-muted-foreground font-mono truncate">({partner.userEmail})</span>
+                )}
                 {partner.userEmail && (
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0 rounded-lg"
-                    onClick={() => copyToClipboard(partner.userEmail!, "User Gmail", "userEmail")}
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0 rounded"
+                    onClick={() => copyToClipboard(partner.userEmail!, "Owner Email", "userEmail")}
                   >
                     {copiedKey === "userEmail" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </Button>
@@ -887,52 +886,65 @@ function PartnerDetailDialog({
               </div>
             </div>
 
-            {/* Card 2: Branded Portal & Referral */}
-            <div className="rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Portal & Referral</span>
-                {partner.referralCode && (
-                  <Badge variant="outline" className="font-mono text-[10px] uppercase px-1.5 py-0 font-bold bg-muted/40">
-                    {partner.referralCode}
-                  </Badge>
-                )}
-              </div>
-              <div className="space-y-1.5">
+            {/* Strip 2: Custom Portal */}
+            <div className="rounded-lg border border-border/70 bg-card/60 px-3.5 py-2.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-medium shrink-0 w-32">Custom Portal</span>
+              <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
                 {partner.portalUrl ? (
-                  <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                  <>
                     <a
                       href={partner.portalUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="font-mono text-xs text-primary hover:underline truncate inline-flex items-center gap-1.5"
+                      className="font-mono text-primary hover:underline truncate inline-flex items-center gap-1.5"
                     >
-                      <Globe className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate">{partner.portalUrl}</span>
-                      <ExternalLink className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                      <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
                     </a>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-mono">
+                      SSL Active
+                    </Badge>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0 rounded"
                       onClick={() => copyToClipboard(partner.portalUrl!, "Portal URL", "portalUrl")}
                     >
-                      {copiedKey === "portalUrl" ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                      {copiedKey === "portalUrl" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </Button>
-                  </div>
+                  </>
                 ) : (
-                  <div className="text-xs text-muted-foreground italic px-2 py-1">No custom portal URL</div>
+                  <span className="text-muted-foreground italic">No custom portal configured</span>
                 )}
+              </div>
+            </div>
+
+            {/* Strip 3: Referral Program */}
+            <div className="rounded-lg border border-border/70 bg-card/60 px-3.5 py-2.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground font-medium shrink-0 w-32">Referral Program</span>
+              <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
+                <span className="font-mono font-medium text-foreground">
+                  Code <span className="font-bold text-primary">{partner.referralCode || "None"}</span>
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">
+                  {partner.referralCommissionPercent ?? 20}% Comm.
+                </span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground">
+                  {partner.referralAudienceFreeMinutes ?? 100} Free Mins
+                </span>
                 {referralLink && (
-                  <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground px-1">
-                    <span className="truncate">{partner.referredCount ?? 0} referred walk-ins</span>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline font-medium"
-                      onClick={() => copyToClipboard(referralLink, "Referral Link", "referralLink")}
-                    >
-                      {copiedKey === "referralLink" ? "Copied Link!" : "Copy Referral Link"}
-                    </button>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-[11px] text-primary hover:text-primary/80 shrink-0 font-medium"
+                    onClick={() => copyToClipboard(referralLink, "Referral Link", "referralLink")}
+                  >
+                    {copiedKey === "referralLink" ? <Check className="w-3 h-3 text-emerald-500 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
+                    Copy Link
+                  </Button>
                 )}
               </div>
             </div>
