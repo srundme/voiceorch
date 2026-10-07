@@ -270,14 +270,11 @@ describe("live pipeline invariants (calls 772→1320, 14315)", () => {
     expect(pipelineSrc).not.toContain("answering last partial");
   });
 
-  it("does not replay a spoken pitch or loop the callback closer (call 26692)", () => {
-    expect(methodBody("isCarrierSelfEcho")).toContain("isCallerClosingUtterance");
-    expect(methodBody("isCarrierSelfEcho")).toContain("isCallerFarewellUtteranceShared");
+  it("does not replay a spoken pitch (call 26692)", () => {
     expect(methodBody("handleStreamingTranscript")).toContain("collapseRepeatedUtterance");
     expect(methodBody("handleStreamingTranscript")).toContain("isStutterLoopTranscript");
     expect(methodBody("captureBargedRemainder")).toContain("_currentTurnPlayedSentences");
     expect(methodBody("resumeBargedReply")).toContain("False barge remainder already spoken");
-    expect(methodBody("processTurn")).toContain("_scheduledCallbackThisCall");
     expect(methodBody("handleToolCallInner")).toContain("you MUST call end_call");
     expect(methodBody("handleToolCallInner")).toContain("buildScheduleCallbackSpeakInstruction");
     expect(methodBody("handleToolCallInner")).not.toContain("toLocaleString(\"en-IN\"");

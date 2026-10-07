@@ -44,7 +44,7 @@ import {
 } from "@workspace/db/call-engine-defaults";
 import { compilePromptCore, hasPromptCore } from "@workspace/db/prompt-core";
 import { withDbRetry } from "./db-retry.js";
-import { transcriptHasFarewellEnding } from "./callFarewell.js";
+import { transcriptHasFarewellEnding } from "./farewell-ending.js";
 import { shouldMarkCallVoicemail } from "../lib/voicemail-detect.js";
 import { looksLikeVoicemailOutcome } from "../services/sheet-auto-calls-helpers.js";
 import { capHandoffTranscript, mergeHandoffTranscript } from "./squad-transcript.js";

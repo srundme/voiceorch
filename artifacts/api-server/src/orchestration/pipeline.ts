@@ -15,16 +15,10 @@ import { buildScheduleCallbackSpeakInstruction } from "./spokenCallbackConfirm.j
 import { demoteResumeMemoryAfterOpening } from "./callerMemory.js";
 import { resolveAutoDetectLanguage } from "./language-filler-guard.js";
 import { buildLanguageLockNote, detectExplicitLanguageRequest } from "./explicit-language-request.js";
-import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isQuestionUtterance, isRepeatedAgentLine, makeFlowStepGuard } from "./conversationDiscipline.js";
+import { buildAntiRepeatNudge, extractRecentAgentQuestions, isBareAcknowledgement, isRepeatedAgentLine, makeFlowStepGuard } from "./conversationDiscipline.js";
 import { buildOpeningHandshakeNudge, humanizeOutboundOpener, OPENING_HANDSHAKE_MS } from "./opening-handshake.js";
 import { buildWhereFromNudge, trimWhereFromSpeech } from "./spoken-place.js";
-import {
-  isCallerFarewellUtterance as isCallerFarewellUtteranceShared,
-  isCallerClosingUtterance,
-  isCallerNotInterestedUtterance,
-  transcriptHasFarewellEnding,
-  agentLineEndsWithGoodbye,
-} from "./callFarewell.js";
+import { transcriptHasFarewellEnding, agentLineEndsWithGoodbye } from "./farewell-ending.js";
 import { shouldSwitchSttLang } from "./stt-language-switch.js";
 import { EAGER_PARTIAL_STABLE_MS, isEagerCommitReady, isQueuedDuplicateUserTurn, reconcileSpeculativePrefill, speculativeInputHash } from "./eager-stt.js";
 import {
@@ -1533,8 +1527,6 @@ export class OrchestrationPipeline implements VoiceSession {
   // to quote the previous line and forbid a verbatim repeat, escalating if stuck.
   private lastAssistantSpokenRaw = "";
   private consecutiveRepeats = 0;
-  /** Call 26692: after schedule_callback the LLM replayed the same closer four times. */
-  private _scheduledCallbackThisCall = false;
   // Interruption hint (inspired by Bolna): tracks sentences fully played this agent turn.
   // On barge-in these are captured into _interruptionHint; injected into the next
   // processTurn()'s historyForLlm so the LLM knows what the caller already heard and
@@ -3219,8 +3211,6 @@ export class OrchestrationPipeline implements VoiceSession {
       ttsOnWire,
       protectedShortIntent:
         isHardInterruptTranscript(transcript)
-        || isCallerClosingUtterance(transcript)
-        || isCallerFarewellUtteranceShared(transcript)
         || (this.expectingShortAnswerNow() && shouldAcceptCallerInterrupt({
           text: transcript,
           isAudioPlaying: true,
@@ -3924,17 +3914,12 @@ export class OrchestrationPipeline implements VoiceSession {
     }
     
     let transcript = rawTranscript.trim();
-    // Call 26692: Saaras looped "avlo avlo avlo…" into a real LLM turn, so the
-    // agent spoke the hardcoded-sounding closer again. Collapse first so a
-    // genuine short close ("avlo") can still hang up.
+    // Call 26692: Saaras looped "avlo avlo avlo…" into a real LLM turn. Collapse
+    // first so a genuine short reply still reaches the LLM once.
     {
       const collapsed = collapseRepeatedUtterance(transcript);
       if (collapsed !== transcript && isStutterLoopTranscript(transcript, collapsed)) {
-        if (
-          isCallerClosingUtterance(collapsed)
-          || isCallerFarewellUtteranceShared(collapsed)
-          || isBareAcknowledgement(collapsed)
-        ) {
+        if (isBareAcknowledgement(collapsed) || collapsed.split(/\s+/).length <= 3) {
           transcript = collapsed;
         } else {
           logger.info(
@@ -8133,7 +8118,6 @@ export class OrchestrationPipeline implements VoiceSession {
             callId,
             notes,
           });
-          this._scheduledCallbackThisCall = true;
           return (
             `${buildScheduleCallbackSpeakInstruction({
               callerText: this.lastUserTurnText(),
@@ -9026,66 +9010,6 @@ export class OrchestrationPipeline implements VoiceSession {
     // ── Guardrail route check ──
     // Fast word-overlap classifier — runs before the main LLM to intercept
     // sensitive or off-topic utterances and play a canned response instead.
-
-    // ── Caller farewell short-circuit ─────────────────────────────────────
-    // When the caller says a clear farewell ("Thank you", "Bye", "நன்றி"…)
-    // after the opening exchange, skip the LLM entirely and trigger end_call
-    // immediately.  Without this, the LLM responds with an acknowledgment
-    // ("சரிங்க") and keeps waiting — the caller has to hang up manually.
-    // In group meetings, "thank you"/"bye" is usually participants talking to
-    // EACH OTHER — never auto-leave the meeting on a farewell phrase.
-    const callerWantsOut =
-      isCallerClosingUtterance(transcript) || isCallerFarewellUtteranceShared(transcript);
-    const callerNotInterested = isCallerNotInterestedUtterance(transcript);
-    const postCallbackAck =
-      this._scheduledCallbackThisCall
-      && (
-        callerWantsOut
-        || isBareAcknowledgement(transcript)
-        || /^(no|nope|nah|illa|இல்ல)(?:\s+(?:sir|madam|thanks|thank you))?\.?$/i.test(transcript.trim())
-      );
-    const postCallbackRepeatClose =
-      this._scheduledCallbackThisCall
-      && this.consecutiveRepeats >= 1
-      && !isQuestionUtterance(transcript);
-    if (
-      !this.isMeetingMode
-      && (
-        (this.turnIndex >= 1 && callerNotInterested)
-        || (this.turnIndex >= 3 && callerWantsOut)
-        || postCallbackAck
-        || postCallbackRepeatClose
-      )
-    ) {
-      const endCallTool = this.agent.tools.find((t) => t.type === "end_call");
-      if (endCallTool) {
-        logger.info(
-          {
-            callId: this.config.callId,
-            transcript,
-            turnIndex: this.turnIndex,
-            postCallbackAck,
-            postCallbackRepeatClose,
-            callerNotInterested,
-          },
-          callerNotInterested
-            ? "Pipeline: caller not-interested — ending call (skip funding re-ask)"
-            : "Pipeline: caller farewell detected — auto-triggering end_call (skipping LLM)",
-        );
-        this.logExec("Agent", "system", {
-          status: "info",
-          metadata: {
-            event: callerNotInterested ? "Caller Not Interested Auto-End" : "Caller Farewell Auto-End",
-            transcript,
-            turnNumber: this._activeTurnIndex,
-          },
-        });
-        // Soft close for decline: prefer configured goodbye / skip pitch.
-        await this.executeEndCall(endCallTool as AgentTool & { type: "end_call" });
-        await this.drainPlaybackTail();
-        return;
-      }
-    }
 
     const guardrailResponse = this.checkGuardrailRoutes(transcript);
     if (guardrailResponse !== null) {
@@ -12660,19 +12584,6 @@ export class OrchestrationPipeline implements VoiceSession {
       const phrase = p.trim().toLowerCase();
       return phrase.length > 0 && lower.includes(phrase);
     });
-  }
-
-  /**
-   * Returns true when the caller's utterance is a pure farewell — short enough
-   * that it cannot be anything else, and containing at least one unambiguous
-   * farewell keyword.  Used by the processTurn() farewell short-circuit.
-   *
-   * Conservative by design: "Thank you for the information" does NOT match
-   * (extra content words), "Thank you" DOES match.  This prevents ending the
-   * call on a mid-conversation polite acknowledgment.
-   */
-  private isCallerFarewellUtterance(transcript: string): boolean {
-    return isCallerFarewellUtteranceShared(transcript);
   }
 
   /**
