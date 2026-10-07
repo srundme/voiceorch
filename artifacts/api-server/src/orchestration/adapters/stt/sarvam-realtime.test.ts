@@ -170,7 +170,7 @@ describe("toRealtimeLanguageCode", () => {
 describe("buildRealtimeWsUrl", () => {
   it.each(["saaras:v4", "saaras:v4-realtime"])("honors configured %s instead of silently downgrading", (model) => {
     const url = new URL(buildRealtimeWsUrl({ model, languageCode: "hi-IN", sampleRate: 8000, mode: "transcribe" }));
-    expect(url.searchParams.get("model")).toBe("saaras:v4-realtime");
+    expect(url.searchParams.get("model")).toBe("saaras:v4");
   });
 
   it("hits the realtime path with millisecond VAD and 8 kHz", () => {

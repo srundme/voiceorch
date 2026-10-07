@@ -192,9 +192,17 @@ describe("resolveCartesiaTtsLanguage", () => {
     expect(resolveCartesiaTtsLanguage("नमस्ते, आप कैसे हैं", "en-IN")).toBe("hi-IN");
   });
 
-  it("keeps the session tag for Latin-only text", () => {
+  it("keeps the session tag for short or romanized Latin text", () => {
     expect(resolveCartesiaTtsLanguage("Okay", "ta-IN")).toBe("ta-IN");
     expect(resolveCartesiaTtsLanguage("Hello", "en-IN")).toBe("en-IN");
+    expect(resolveCartesiaTtsLanguage("Aap kaise ho, sir?", "hi-IN")).toBe("hi-IN");
+  });
+
+  it("speaks English sentences as en-IN on an Indic session so numbers stay English", () => {
+    expect(resolveCartesiaTtsLanguage("What is your current sum insured with them?", "ta-IN")).toBe("en-IN");
+    expect(resolveCartesiaTtsLanguage("Star handles claims in-house with over 14,000 network hospitals.", "ta-IN")).toBe("en-IN");
+    expect(resolveCartesiaTtsLanguage("Okay, உங்க renewal எப்போ?", "ta-IN")).toBe("ta-IN");
+    expect(resolveCartesiaTtsLanguage("What time works for you between 10 AM and 6 PM?", "ta-IN")).toBe("en-IN");
   });
 });
 

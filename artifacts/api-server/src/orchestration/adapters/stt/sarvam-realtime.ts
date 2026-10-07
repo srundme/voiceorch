@@ -201,10 +201,12 @@ export function isLidDriftFinal(_opts: {
   return false;
 }
 
-export function resolveSarvamRealtimeModel(model?: string | null): "saaras:v3-realtime" | "saaras:v4-realtime" {
+/** The realtime socket accepts only `saaras:v3-realtime` and `saaras:v4`;
+ *  `saaras:v4-realtime` is rejected with a fatal invalid_model close. */
+export function resolveSarvamRealtimeModel(model?: string | null): "saaras:v3-realtime" | "saaras:v4" {
   const selected = model?.trim();
   return selected === "saaras:v4" || selected === "saaras:v4-realtime"
-    ? "saaras:v4-realtime"
+    ? "saaras:v4"
     : "saaras:v3-realtime";
 }
 
@@ -344,7 +346,7 @@ interface RealtimeMsg {
 }
 
 export class SarvamRealtimeSTT implements STTAdapter {
-  private readonly model: "saaras:v3-realtime" | "saaras:v4-realtime";
+  private readonly model: "saaras:v3-realtime" | "saaras:v4";
   private readonly legacy: SarvamSTT;
   private readonly key: string;
   private readonly sampleRate: 8000 | 16000;

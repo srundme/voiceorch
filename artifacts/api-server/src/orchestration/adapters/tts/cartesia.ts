@@ -187,7 +187,26 @@ export function resolveCartesiaTtsLanguage(text: string, fallback: string | null
     return fb.startsWith("mr") ? "mr-IN" : "hi-IN";
   }
   const tag = (fallback ?? "").trim();
+  if (tag && !tag.toLowerCase().startsWith("en") && looksLikeEnglishSentence(t)) return "en-IN";
   return tag || "en-IN";
+}
+
+const ENGLISH_FUNCTION_WORDS = new Set([
+  "i", "i'm", "you", "your", "you're", "we", "our", "it", "it's", "is", "are", "was", "be",
+  "the", "a", "an", "to", "of", "for", "with", "and", "or", "in", "on", "at", "this", "that",
+  "do", "does", "have", "has", "can", "will", "would", "what", "which", "when", "how", "who",
+  "my", "me", "so", "if", "not", "there", "about", "from", "by", "any", "all",
+]);
+
+/** An Indic session tag on an English sentence makes Sonic read digits and
+ *  times in that language. Romanized Indic ("aap kaise ho") and one-word fillers
+ *  ("Okay") lack English function words and keep the session tag. */
+function looksLikeEnglishSentence(text: string): boolean {
+  const words = text.toLowerCase().match(/[a-z']+/g) ?? [];
+  if (words.length < 3) return false;
+  let hits = 0;
+  for (const w of new Set(words)) if (ENGLISH_FUNCTION_WORDS.has(w)) hits++;
+  return hits >= 2;
 }
 
 export function appendCartesiaRemainder(prev: string, next: string): string {
