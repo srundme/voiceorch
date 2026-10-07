@@ -104,6 +104,30 @@ describe("pushCartesiaSpeakable", () => {
     });
   });
 
+  it("recovers the tail when the stream kept an emotion tag the full reply stripped (call 43738)", () => {
+    const s = new CartesiaTurnStream();
+    expect(s.push('<emotion value="curious"/> Star Health Insurance, Chennai-ல இருந்து பேசுறேன். ')).toHaveLength(1);
+    expect(s.push("உங்களுக்கோ உங்க family-க்கோ இப்போ ஏதாவது health insurance")).toEqual([]);
+    const full = "Star Health Insurance, Chennai-ல இருந்து பேசுறேன். உங்களுக்கோ உங்க family-க்கோ இப்போ ஏதாவது health insurance இருக்கா?";
+    expect(s.finish(full)).toEqual({
+      stream: ["உங்களுக்கோ உங்க family-க்கோ இப்போ ஏதாவது health insurance இருக்கா?"],
+      leftover: "",
+    });
+  });
+
+  it("completes a truncated single-sentence reply and keeps its emotion tag", () => {
+    const s = new CartesiaTurnStream();
+    expect(s.push('<emotion value="content"/> இல்ல நாளைக்கு ten AM வசதியா இ')).toEqual([]);
+    expect(s.finish("இல்ல நாளைக்கு ten AM வசதியா இருக்குமா?")).toEqual({
+      stream: ['<emotion value="content"/> இல்ல நாளைக்கு ten AM வசதியா இருக்குமா?'],
+      leftover: "",
+    });
+  });
+
+  it("returns the unspoken tail across an emotion tag and leading space", () => {
+    expect(cartesiaUnspokenTail('<emotion value="calm"/> சரிங்க. ', "சரிங்க. நாளைக்கு பேசலாம்.")).toBe("நாளைக்கு பேசலாம்.");
+  });
+
   it.each([
     ["Hello.", " Are", " you", " ready?"],
     ["कीमत ", "3.", "5 ", "है।", " ठीक ", "है?"],
