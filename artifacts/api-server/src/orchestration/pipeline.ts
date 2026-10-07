@@ -143,6 +143,7 @@ import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragment
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, buildInterruptionInstruction, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
 import { toolDefsForFollowUp } from "./tool-follow-up.js";
+import { speculativeReplayChat } from "./speculative-replay.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
@@ -10587,28 +10588,7 @@ export class OrchestrationPipeline implements VoiceSession {
           },
           "Speculative LLM hit — committing prefill tokens",
         );
-        const spec = _spec;
-        effectiveLlm = {
-          chat: async (
-            _h: ConversationTurn[],
-            _s: string,
-            realOnToken: (t: string) => void,
-            realOnDone: (ft: string, u?: LLMUsage) => void,
-            realOpts?: Parameters<LLMAdapter["chat"]>[4],
-          ) => {
-            // 1. Drain tokens buffered so far (synchronous — no event-loop yield)
-            const buffered = spec.storedTokens.splice(0);
-            // 2. Redirect future tokens from the still-running speculative stream
-            spec.tokenSink = (t) => realOnToken(t);
-            // 3. Flush buffered tokens through the real filter pipeline
-            for (const t of buffered) realOnToken(t);
-            // 4. Wait for the speculative stream to finish
-            await spec.completedPromise;
-            // 5. Signal completion and report usage
-            realOnDone(spec.storedFullText);
-            if (spec.storedUsage && realOpts?.onUsage) realOpts.onUsage(spec.storedUsage);
-          },
-        } as unknown as typeof this.llm;
+        effectiveLlm = { chat: speculativeReplayChat(_spec) } as unknown as typeof this.llm;
       } else {
         // Transcript changed, language switched, tool call, or already aborted:
         // discard every speculative token. processTurn runs llm.chat on the final.
@@ -10679,6 +10659,9 @@ export class OrchestrationPipeline implements VoiceSession {
       pendingText  = "";
       triggeredToolName = null;
       triggeredToolArgs = {};
+      // A committed speculative stream is already spent; replaying it again
+      // returns the same result, so retries must ask the model afresh.
+      effectiveLlm = this.llm;
       await new Promise<void>((r) => setTimeout(r, 300 * (llmAttempt - 1)));
       logWarningEvent(this.logFn, EXEC_COMPONENTS.LLM, "LLM Retry", ["llm_retry"], {
         provider: this.agent.llmProvider,
