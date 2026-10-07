@@ -142,6 +142,7 @@ import {
 import { pickClarificationPhrase, isCallerAttentionUtterance, shouldHoldFragmentForCoalesce, signalsConversationalContinuation, isCallerAudioDifficulty, isTopicClarificationAsk, isBackchannelOnlyUtterance, isNearDuplicateUtterance, coalescePendingTranscripts, looksLikeIncompleteClauseStart, isHardInterruptTranscript, collapseRepeatedUtterance, isStutterLoopTranscript } from "./transcriptQuality.js";
 import { parseToolEnvelope, xmlToolSniff } from "./adapters/llm/sarvam.js";
 import { buildInterruptionHint, buildInterruptionInstruction, joinHeardSentences, resolveSpokenForHistory, estimateHeardPrefix, composeHeardWithMid } from "./bargeHeard.js";
+import { toolDefsForFollowUp } from "./tool-follow-up.js";
 import { resolveSttTuning, type SttTuning } from "./stt-tuning.js";
 import { shouldSkipImmediateBackchannel, ttsContextIdForSequence } from "./filler-playback.js";
 import { FILLER_SEQUENCE_ID, InterruptionManager } from "./interruption-manager.js";
@@ -11914,7 +11915,7 @@ export class OrchestrationPipeline implements VoiceSession {
     // single user turn (e.g. check_availability → book_appointment → end_call).
     // A depth cap forces a final tools-detached narration to prevent runaway loops.
     const MAX_TOOL_DEPTH = 5;
-    const toolDefs = this.buildVoiceToolDefs();
+    const toolDefs = toolDefsForFollowUp(toolName, this.buildVoiceToolDefs());
     const fatalSchedulingConfig =
       this.schedulingConfigurationFailed && result.includes("\"no_event_type\"");
     // A missing event type cannot be recovered by another tool call. Detach all
