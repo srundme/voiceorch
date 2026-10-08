@@ -17,9 +17,20 @@ import { createSessionToken } from "../lib/session.js";
 import { setSessionCookie } from "../lib/session-cookie.js";
 import { logger } from "../lib/logger.js";
 import { applyPendingPartnerPromotion } from "../services/partner-promotion.js";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const router = Router();
+
+/** Accounts an admin can only open with the founder key (FOUNDER_KEY env). */
+const FOUNDER_PROTECTED_EMAILS = new Set(["codemateai01@gmail.com"]);
+
+/** Fails closed: with FOUNDER_KEY unset, protected accounts cannot be opened. */
+function founderKeyMatches(provided: unknown): boolean {
+  const expected = process.env["FOUNDER_KEY"]?.trim();
+  if (!expected || typeof provided !== "string" || !provided) return false;
+  const digest = (s: string) => createHash("sha256").update(s).digest();
+  return timingSafeEqual(digest(provided.trim()), digest(expected));
+}
 
 // ─── Exchange Codes (public, no admin auth) ────────────────────────────────────
 // Short-lived opaque codes (60 s TTL, single-use) stored in the DB alongside the
@@ -617,6 +628,25 @@ router.post("/admin/impersonate/:clerkId", async (req, res): Promise<void> => {
     if (user.status === "deleted") {
       res.status(400).json({ error: "Cannot impersonate a deleted user" });
       return;
+    }
+
+    if (FOUNDER_PROTECTED_EMAILS.has((user.email ?? "").toLowerCase())) {
+      const provided = (req.body as { founderKey?: unknown } | undefined)?.founderKey;
+      if (!founderKeyMatches(provided)) {
+        await logAdminAction(req, {
+          targetUserId: clerkId,
+          targetResourceType: "user",
+          targetResourceId: clerkId,
+          action: "founder_key_rejected",
+          afterValue: { keyProvided: typeof provided === "string" && provided.length > 0 },
+        });
+        // 428, not 401/403: the admin panel treats those as an expired admin session.
+        res.status(428).json({
+          error: provided ? "Wrong founder key" : "Founder key required",
+          code: "founder_key_required",
+        });
+        return;
+      }
     }
 
     const sessionToken = randomBytes(32).toString("hex");

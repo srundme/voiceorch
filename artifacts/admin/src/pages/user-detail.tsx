@@ -93,6 +93,10 @@ export default function UserDetail() {
   const [suspendModal, setSuspendModal] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
 
+  const [founderKeyModal, setFounderKeyModal] = useState(false);
+  const [founderKey, setFounderKey] = useState("");
+  const [founderKeyError, setFounderKeyError] = useState("");
+
   const [deleteUserModal, setDeleteUserModal] = useState(false);
   const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
 
@@ -220,9 +224,12 @@ export default function UserDetail() {
     });
   };
 
-  const handleImpersonate = () => {
-    impersonate.mutate(clerkId || "", {
+  const handleImpersonate = (key?: string) => {
+    impersonate.mutate({ clerkId: clerkId || "", founderKey: key }, {
       onSuccess: (result) => {
+        setFounderKeyModal(false);
+        setFounderKey("");
+        setFounderKeyError("");
         const base = window.location.origin;
         const name = encodeURIComponent(result.userName || "");
         const email = encodeURIComponent(result.userEmail || "");
@@ -231,7 +238,15 @@ export default function UserDetail() {
         window.open(url, "_blank");
         toast({ title: "Impersonation session started", description: "Dashboard opened in a new tab" });
       },
-      onError: (e) => toast({ title: "Impersonation failed", description: formatApiError(e), variant: "destructive" }),
+      onError: (e) => {
+        const message = formatApiError(e);
+        if (message.includes("founder_key_required")) {
+          setFounderKeyError(key ? "Wrong founder key" : "");
+          setFounderKeyModal(true);
+          return;
+        }
+        toast({ title: "Impersonation failed", description: message, variant: "destructive" });
+      },
     });
   };
 
@@ -320,7 +335,7 @@ export default function UserDetail() {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleImpersonate}
+            onClick={() => handleImpersonate()}
             disabled={impersonate.isPending || isDeleted}
             className="gap-1.5"
           >
@@ -1075,6 +1090,31 @@ export default function UserDetail() {
             <Button variant="outline" onClick={() => setConcurrentModal(false)}>Cancel</Button>
             <Button onClick={handleConcurrentLimit} disabled={setConcurrentLimit.isPending}>{setConcurrentLimit.isPending ? "Saving…" : "Save"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Founder key for protected accounts */}
+      <Dialog
+        open={founderKeyModal}
+        onOpenChange={(o) => { setFounderKeyModal(o); if (!o) { setFounderKey(""); setFounderKeyError(""); } }}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Key className="h-4 w-4" /> Founder key required</DialogTitle>
+            <DialogDescription>{user.email} is a private account. Enter the founder key to log in as this user.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="grid gap-3 py-3"
+            onSubmit={(e) => { e.preventDefault(); if (founderKey) handleImpersonate(founderKey); }}
+          >
+            <Label>Founder key</Label>
+            <Input type="password" autoFocus autoComplete="off" value={founderKey} onChange={(e) => setFounderKey(e.target.value)} />
+            {founderKeyError && <p className="text-xs text-destructive">{founderKeyError}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setFounderKeyModal(false)}>Cancel</Button>
+              <Button type="submit" disabled={!founderKey || impersonate.isPending}>{impersonate.isPending ? "Checking…" : "Login As User"}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

@@ -310,10 +310,10 @@ export function useAdminEditAgent(clerkId: string) {
 
 export function useImpersonateUser() {
   return useMutation({
-    mutationFn: (clerkId: string) =>
+    mutationFn: ({ clerkId, founderKey }: { clerkId: string; founderKey?: string }) =>
       adminFetch<{ sessionToken: string; exchangeCode: string; userName: string | null; userEmail: string | null }>(
         `/impersonate/${clerkId}`,
-        { method: "POST" },
+        { method: "POST", body: JSON.stringify(founderKey ? { founderKey } : {}) },
       ),
   });
 }
