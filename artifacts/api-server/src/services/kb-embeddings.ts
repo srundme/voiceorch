@@ -26,6 +26,9 @@ export const KB_EMBEDDING_DIMS = 768;
 const EMBED_QUERY_TIMEOUT_MS = Number(process.env["KB_EMBED_QUERY_TIMEOUT_MS"] ?? 1500);
 const EMBED_BATCH_TIMEOUT_MS = 30_000;
 const EMBED_BATCH_SIZE = 32;
+const EMBED_BATCH_GAP_MS = 2_000;
+const EMBED_RATE_LIMIT_WAIT_MS = 65_000;
+const EMBED_RATE_LIMIT_RETRIES = 5;
 const EMBED_DOC_MAX_CHARS = 6000;
 const QUERY_CACHE_MAX = 300;
 const JINA_EMBED_URL = "https://api.jina.ai/v1/embeddings";
@@ -108,7 +111,6 @@ function embedBlocked(): boolean {
 function fatalReason(err: unknown): string | null {
   if (err instanceof KbEmbedHttpError) {
     if (err.status === 401 || err.status === 403) return "Embedding API key rejected";
-    if (err.status === 429) return "Embedding quota exhausted";
     if (err.status === 402) return "Embedding billing disabled";
   }
   const msg = String(err).toLowerCase();
@@ -382,7 +384,7 @@ async function embedMissingEntries(): Promise<void> {
     if (!rows.length) return;
 
     const texts = rows.map((r) => buildEmbedText(r));
-    const vecs = await callBatchEmbed(texts, "retrieval.passage", EMBED_BATCH_TIMEOUT_MS);
+    const vecs = await embedBatchWithRateLimitRetry(texts);
     if (!vecs) {
       openEmbedBlock("No embedding API key configured");
       return;
@@ -407,6 +409,19 @@ async function embedMissingEntries(): Promise<void> {
     logger.info({ batch: rows.length, updated }, "KB embed worker: batch embedded");
 
     if (rows.length < EMBED_BATCH_SIZE) return;
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, EMBED_BATCH_GAP_MS));
+  }
+}
+
+/** Trial keys are limited per minute: a 429 means slow down, not stop for 30 minutes. */
+async function embedBatchWithRateLimitRetry(texts: string[]): Promise<number[][] | null> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await callBatchEmbed(texts, "retrieval.passage", EMBED_BATCH_TIMEOUT_MS);
+    } catch (err) {
+      if (!(err instanceof KbEmbedHttpError) || err.status !== 429 || attempt >= EMBED_RATE_LIMIT_RETRIES) throw err;
+      logger.warn({ attempt, detail: err.detail }, "KB embed worker rate-limited — waiting before retry");
+      await new Promise((r) => setTimeout(r, EMBED_RATE_LIMIT_WAIT_MS));
+    }
   }
 }
