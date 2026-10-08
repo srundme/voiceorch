@@ -6089,6 +6089,7 @@ export class OrchestrationPipeline implements VoiceSession {
           if (
             streamedHead
             && this.callDirection === "outbound"
+            && this.agent.openingHandshakeEnabled !== false
             && !resumeDropped
             && !handoffTakeover
           ) {
@@ -6220,7 +6221,12 @@ export class OrchestrationPipeline implements VoiceSession {
       }
 
       if (!welcomeAlreadySpoken && (this.closed || !greeting.trim())) return;
-      if (this.callDirection === "outbound" && !resumeDropped && !handoffTakeover) {
+      if (
+        this.callDirection === "outbound"
+        && this.agent.openingHandshakeEnabled !== false
+        && !resumeDropped
+        && !handoffTakeover
+      ) {
         if (greeting.trim()) {
           const shaped = humanizeOutboundOpener(greeting, { dropPitchOnly: welcomeAlreadySpoken });
           if (shaped !== greeting) {
