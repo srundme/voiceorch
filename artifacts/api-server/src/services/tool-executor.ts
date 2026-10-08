@@ -138,7 +138,7 @@ export const END_CALL_TOOL_NAME = "end_call";
 /** Shared description for the hangup tool, used by both the built-in injection
  *  and the canonicalized explicit end_call definition. */
 const END_CALL_TOOL_DESCRIPTION =
-  "End the phone call. ONLY call this when the caller EXPLICITLY says goodbye, bye, wants to hang up, or clearly states their needs are fully addressed AND they are done. Do NOT call this if the caller says 'hello', 'hi', or any greeting — that means they are still in the conversation. Do NOT end the call just because the topic seems concluded — always ask 'Is there anything else I can help you with?' first and wait for a clear goodbye or dismissal before ending.";
+  "End the phone call. Call this when the conversation is finished: the caller says goodbye, wants to hang up, declines, or the agent's instructions say the call should end. Say your goodbye in the same reply. Do NOT call this if the caller says 'hello', 'hi', or any greeting — that means they are still in the conversation.";
 
 /** The canonical hangup ToolDefinition offered to the LLM. */
 const END_CALL_TOOL_DEF: ToolDefinition = {
