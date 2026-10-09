@@ -103,9 +103,25 @@ async function enrichCall(call: typeof callsTable.$inferSelect, campaignId?: num
     .from(agentsTable)
     .where(eq(agentsTable.id, call.agentId));
   const recordingEnabled = agent?.agentConfig?.recordingEnabled ?? false;
+  // Auto-heal false failures:
+  // If call is marked "failed" but has a call summary or transcript > 50 chars,
+  // it was a completed call that got caught in a deploy/restart sweep.
+  let effectiveStatus = sanitizeCallStatus(call.status);
+  let effectiveDuration = call.durationSeconds ?? 0;
+  if (
+    effectiveStatus === "failed" &&
+    (call.callSummary || (call.transcript && call.transcript.length > 50))
+  ) {
+    effectiveStatus = "completed";
+    if (effectiveDuration === 0 && call.endedAt && call.createdAt) {
+      effectiveDuration = Math.max(1, Math.round((call.endedAt.getTime() - call.createdAt.getTime()) / 1000));
+    }
+  }
+
   return {
     ...call,
-    status: sanitizeCallStatus(call.status),
+    status: effectiveStatus,
+    durationSeconds: effectiveDuration,
     dispositionResult: sanitizeDispositionResult(call.dispositionResult),
     agentName: agent?.name ?? "Unknown Agent",
     recordingEnabled,
