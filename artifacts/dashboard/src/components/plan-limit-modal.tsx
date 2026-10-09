@@ -5,11 +5,7 @@ import { ShieldAlert, Crown, Users, Mail, PlusCircle, Zap, Loader2 } from "lucid
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
-declare global {
-  interface Window {
-    Razorpay?: new (opts: Record<string, unknown>) => { open(): void };
-  }
-}
+
 
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {

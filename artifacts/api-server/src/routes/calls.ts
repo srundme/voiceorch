@@ -116,6 +116,13 @@ async function enrichCall(call: typeof callsTable.$inferSelect, campaignId?: num
     if (effectiveDuration === 0 && call.endedAt && call.createdAt) {
       effectiveDuration = Math.max(1, Math.round((call.endedAt.getTime() - call.createdAt.getTime()) / 1000));
     }
+    if (call.status === "failed") {
+      void db
+        .update(callsTable)
+        .set({ status: "completed", durationSeconds: effectiveDuration })
+        .where(eq(callsTable.id, call.id))
+        .catch((err) => logger.warn({ err, callId: call.id }, "Failed to persist auto-healed call status in DB"));
+    }
   }
 
   return {

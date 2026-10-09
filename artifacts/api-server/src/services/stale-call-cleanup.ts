@@ -124,6 +124,9 @@ export function startStaleCallCleanup(): void {
   if (started) return;
   started = true;
 
+  // Immediately heal any falsely failed calls right at boot time
+  void autoRecoverFalselyFailedCalls();
+
   // One-time startup backstop: every active row predating this process has lost
   // its owning in-memory session and can never close normally.
   setTimeout(() => void sweepOrphanedAtStartup(), 30_000);
