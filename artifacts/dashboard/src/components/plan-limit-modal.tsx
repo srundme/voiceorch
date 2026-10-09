@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ShieldAlert, Crown, Users, Mail, Sparkles, Loader2 } from "lucide-react";
+import { ShieldAlert, Crown, Users, Mail, PlusCircle, Zap, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -190,7 +190,7 @@ export function PlanLimitModal({
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-left space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  <PlusCircle className="h-4 w-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">Add +1 Agent Slot</span>
                 </div>
                 <div className="text-right">
@@ -255,7 +255,7 @@ export function PlanLimitModal({
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Zap className="h-3.5 w-3.5" />
                   Upgrade Now (₹{price})
                 </>
               )}
