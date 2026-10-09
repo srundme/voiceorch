@@ -1295,11 +1295,21 @@ router.get("/agents/:id/latency-stats", requireAuth, clientContext, async (req, 
 
 /* ─── Plan Upgrade: Buy Additional Agent Slot via Razorpay (₹1,000 / agent) ─── */
 
+function parseSlotPrice(): number {
+  const envVal = process.env.AGENT_SLOT_PRICE_INR;
+  if (!envVal) return 899;
+  const digits = String(envVal).replace(/[^\d]/g, "");
+  const num = parseInt(digits, 10);
+  return Number.isFinite(num) && num > 0 ? num : 899;
+}
+
 function getRazorpayClient(): Razorpay | null {
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return null;
+  const key_id = process.env.RAZORPAY_KEY_ID?.trim();
+  const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim();
+  if (!key_id || !key_secret) return null;
   return new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+    key_id,
+    key_secret,
   });
 }
 
@@ -1309,7 +1319,7 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
     const clerkId = (req as any).clerkUserId as string;
     const rzp = getRazorpayClient();
     if (!rzp) {
-      res.status(503).json({ error: "Payment gateway not configured" });
+      res.status(503).json({ error: "Payment gateway not configured (missing Razorpay keys)" });
       return;
     }
     const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
@@ -1319,18 +1329,18 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
     }
 
     // Dynamic agent slot price in INR (default ₹899). With 18% GST.
-    const slotPriceInr = Math.max(1, Number(process.env.AGENT_SLOT_PRICE_INR ?? 899));
-    const basePaise = slotPriceInr * 100;
+    const slotPriceInr = parseSlotPrice();
+    const basePaise = Math.round(slotPriceInr * 100);
     const gstPaise = Math.round(basePaise * 0.18);
-    const payablePaise = basePaise + gstPaise;
+    const payablePaise = Math.round(basePaise + gstPaise);
 
     const orderPayload = {
       amount: payablePaise,
       currency: "INR",
-      receipt: `agent_up_${user.id}_${Date.now()}`,
+      receipt: `agent_up_${user.id}_${Date.now()}`.slice(0, 40),
       notes: {
         userId: String(user.id),
-        clerkId,
+        clerkId: String(clerkId),
         type: "agent_slot_upgrade",
         basePaise: String(basePaise),
         gstPaise: String(gstPaise),
@@ -1340,7 +1350,10 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
 
     const order = await (rzp.orders as any).create(orderPayload);
 
-    const userPhone = (user.onboardingData as any)?.phone || (user.onboardingData as any)?.phoneNumber || undefined;
+    const rawPhone = (user.onboardingData as any)?.phone || (user.onboardingData as any)?.phoneNumber;
+    const contact = typeof rawPhone === "string" && rawPhone.trim().length >= 10 ? rawPhone.trim() : undefined;
+    const email = typeof user.email === "string" && user.email.includes("@") ? user.email.trim() : undefined;
+    const name = typeof user.name === "string" && user.name.trim().length > 0 ? user.name.trim() : undefined;
 
     res.json({
       orderId: order.id,
@@ -1348,18 +1361,23 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
       basePaise,
       gstPaise,
       currency: "INR",
-      keyId: process.env.RAZORPAY_KEY_ID,
+      keyId: (process.env.RAZORPAY_KEY_ID ?? "").trim(),
       name: "SnapServe",
       description: "Upgrade Plan — +1 Additional Agent Slot",
       prefill: {
-        name: user.name || undefined,
-        email: user.email || undefined,
-        contact: userPhone || undefined,
+        name,
+        email,
+        contact,
       },
     });
-  } catch (err) {
-    req.log.error({ err }, "agents: failed to create upgrade order");
-    res.status(500).json({ error: "Failed to create payment order" });
+  } catch (err: any) {
+    const errorMsg =
+      err?.error?.description ||
+      err?.error?.reason ||
+      err?.message ||
+      "Failed to create payment order";
+    req.log.error({ err, errorMsg }, "agents: failed to create upgrade order");
+    res.status(500).json({ error: errorMsg });
   }
 });
 

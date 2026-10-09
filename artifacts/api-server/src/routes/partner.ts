@@ -318,8 +318,12 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
       agentLimit,
       agentCount,
       clientLimit,
+      agentUpgradePriceInr: (() => {
+        const d = String(process.env.AGENT_SLOT_PRICE_INR ?? "").replace(/[^\d]/g, "");
+        const n = parseInt(d, 10);
+        return Number.isFinite(n) && n > 0 ? n : 899;
+      })(),
       partnerSupportEmail,
-      agentUpgradePriceInr: Math.max(1, Number(process.env.AGENT_SLOT_PRICE_INR ?? 899)),
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");
