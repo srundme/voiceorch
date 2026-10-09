@@ -1340,6 +1340,8 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
 
     const order = await (rzp.orders as any).create(orderPayload);
 
+    const userPhone = (user.onboardingData as any)?.phone || (user.onboardingData as any)?.phoneNumber || undefined;
+
     res.json({
       orderId: order.id,
       amount: payablePaise,
@@ -1349,6 +1351,11 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
       keyId: process.env.RAZORPAY_KEY_ID,
       name: "SnapServe",
       description: "Upgrade Plan — +1 Additional Agent Slot",
+      prefill: {
+        name: user.name || undefined,
+        email: user.email || undefined,
+        contact: userPhone || undefined,
+      },
     });
   } catch (err) {
     req.log.error({ err }, "agents: failed to create upgrade order");

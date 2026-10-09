@@ -86,6 +86,7 @@ export function PlanLimitModal({
           order_id: order.orderId,
           name: "SnapServe",
           description: "Upgrade Plan — +1 Additional Agent Slot",
+          prefill: order.prefill || undefined,
           theme: { color: "#6366f1" },
           modal: {
             ondismiss: () => settle(() => reject(new Error("cancelled"))),
@@ -120,6 +121,8 @@ export function PlanLimitModal({
         if (!window.Razorpay) {
           throw new Error("Razorpay SDK could not be loaded");
         }
+        // Close modal before opening Razorpay so Radix FocusTrap does not steal keyboard focus from Razorpay iframe
+        onClose();
         new window.Razorpay(opts).open();
       });
 
@@ -129,10 +132,14 @@ export function PlanLimitModal({
         title: "Upgrade Successful! 🎉",
         description: "You unlocked an additional agent slot. You can now create your agent.",
       });
-      onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg !== "cancelled") {
+      if (msg === "cancelled") {
+        toast({
+          title: "Upgrade Cancelled",
+          description: "Payment was not completed. You can upgrade anytime.",
+        });
+      } else {
         toast({
           title: "Upgrade Failed",
           description: msg || "Payment could not be completed. Please try again.",
