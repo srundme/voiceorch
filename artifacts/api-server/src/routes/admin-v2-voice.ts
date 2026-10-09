@@ -10,12 +10,14 @@ import {
   walletTransactionsTable,
   usageEventsTable,
   platformSettingsTable,
+  callRecordingsTable,
 } from "@workspace/db";
 import { and, or, desc, eq, gte, ilike, sql, count, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
 import { getAllSessions } from "../orchestration/session.js";
 import { executionIdSearchPattern, parseCallLookup } from "../services/admin-call-lookup.js";
+import { shareableRecordingUrl, issueRecordingShareToken } from "../services/recording-share.js";
 
 const router = Router();
 router.use("/admin/voice", requireAdmin);
@@ -312,6 +314,7 @@ router.get("/admin/voice/calls/:callId", async (req, res): Promise<void> => {
         transcript: c.transcript,
         callSummary: c.callSummary,
         recordingUrl: c.recordingUrl,
+        shareUrl: c.recordingUrl ? shareableRecordingUrl(c.id) : null,
         executionId: c.executionId,
         primaryLanguage: c.primaryLanguage ?? row.language,
         transferType: c.transferType,
@@ -346,6 +349,43 @@ router.get("/admin/voice/calls/:callId", async (req, res): Promise<void> => {
     });
   } catch (err) {
     logger.error({ err }, "voice/calls/:id failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Direct recording audio download ──────────────────────────────────────────
+
+router.get("/admin/voice/calls/:callId/recording", async (req, res): Promise<void> => {
+  try {
+    const rawId = req.params.callId;
+    const callId = Number(rawId);
+    if (!Number.isFinite(callId)) {
+      res.status(400).json({ error: "Invalid call id" });
+      return;
+    }
+
+    const [rec] = await db
+      .select({
+        audio: callRecordingsTable.audio,
+        contentType: callRecordingsTable.contentType,
+      })
+      .from(callRecordingsTable)
+      .where(eq(callRecordingsTable.callId, callId))
+      .orderBy(desc(callRecordingsTable.id))
+      .limit(1);
+
+    if (!rec) {
+      res.status(404).json({ error: "Recording not found in database" });
+      return;
+    }
+
+    const token = issueRecordingShareToken(callId);
+    res.setHeader("Content-Type", rec.contentType || "audio/wav");
+    res.setHeader("Content-Disposition", `attachment; filename="call-${callId}.wav"`);
+    res.setHeader("X-Share-Token", token);
+    res.send(rec.audio);
+  } catch (err) {
+    logger.error({ err }, "voice/calls/:id/recording failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
