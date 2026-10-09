@@ -16,6 +16,11 @@ describe("parseCallLookup", () => {
     expect(parseCallLookup("1a2b3c4d")).toEqual({ kind: "execution", executionId: "1a2b3c4d" });
   });
 
+  it("reads phone numbers with 10 digits or plus prefix", () => {
+    expect(parseCallLookup("8754584433")).toEqual({ kind: "phone", phone: "8754584433" });
+    expect(parseCallLookup("+919886280424")).toEqual({ kind: "phone", phone: "919886280424" });
+  });
+
   it("rejects empty or unusable input", () => {
     expect(parseCallLookup("")).toBeNull();
     expect(parseCallLookup("   ")).toBeNull();

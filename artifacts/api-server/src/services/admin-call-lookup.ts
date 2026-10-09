@@ -5,7 +5,8 @@
 
 export type CallLookup =
   | { kind: "id"; id: number }
-  | { kind: "execution"; executionId: string };
+  | { kind: "execution"; executionId: string }
+  | { kind: "phone"; phone: string };
 
 const EXECUTION_PREFIX = "exec_";
 
@@ -16,7 +17,17 @@ export function parseCallLookup(raw: string | undefined | null): CallLookup | nu
   const value = (raw ?? "").trim();
   if (!value) return null;
 
+  // Explicit phone indicators (starts with + or has phone formatting)
+  const digitsOnly = value.replace(/\D/g, "");
+  if (value.startsWith("+") && digitsOnly.length >= 7) {
+    return { kind: "phone", phone: digitsOnly };
+  }
+
   if (/^\d+$/.test(value)) {
+    // 10 digits or more is an Indian / international phone number
+    if (value.length >= 10) {
+      return { kind: "phone", phone: value };
+    }
     const id = Number(value);
     return Number.isSafeInteger(id) && id > 0 ? { kind: "id", id } : null;
   }
@@ -30,6 +41,11 @@ export function parseCallLookup(raw: string | undefined | null): CallLookup | nu
   // Bare hex suffix — operators often copy only the part after "exec_".
   if (BARE_EXECUTION_RE.test(value)) {
     return { kind: "execution", executionId: lower };
+  }
+
+  // Fallback for phone numbers with spaces, brackets, or dashes
+  if (digitsOnly.length >= 7 && !/[a-z]/i.test(value)) {
+    return { kind: "phone", phone: digitsOnly };
   }
 
   return null;

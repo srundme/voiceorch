@@ -11,7 +11,7 @@ import {
   usageEventsTable,
   platformSettingsTable,
 } from "@workspace/db";
-import { and, desc, eq, gte, ilike, sql, count, inArray } from "drizzle-orm";
+import { and, or, desc, eq, gte, ilike, sql, count, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAdmin.js";
 import { logger } from "../lib/logger.js";
 import { getAllSessions } from "../orchestration/session.js";
@@ -172,9 +172,11 @@ router.get("/admin/voice/call-search", async (req, res): Promise<void> => {
         userId: callsTable.userId,
         agentId: callsTable.agentId,
         toNumber: callsTable.toNumber,
+        fromNumber: callsTable.fromNumber,
         durationSeconds: callsTable.durationSeconds,
         costCents: callsTable.costCents,
         errorMessage: callsTable.errorMessage,
+        callSummary: callsTable.callSummary,
         createdAt: callsTable.createdAt,
         agentName: agentsTable.name,
         userEmail: usersTable.email,
@@ -186,10 +188,15 @@ router.get("/admin/voice/call-search", async (req, res): Promise<void> => {
       .where(
         lookup.kind === "id"
           ? eq(callsTable.id, lookup.id)
-          : ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId)),
+          : lookup.kind === "execution"
+          ? ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId))
+          : or(
+              ilike(callsTable.toNumber, `%${lookup.phone}%`),
+              ilike(callsTable.fromNumber, `%${lookup.phone}%`),
+            ),
       )
       .orderBy(desc(callsTable.createdAt))
-      .limit(25);
+      .limit(50);
 
     res.json({ query: String(req.query["q"] ?? ""), count: rows.length, calls: rows });
   } catch (err) {
