@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ShieldAlert, Bot, Users, Mail, Sparkles, Loader2 } from "lucide-react";
+import { ShieldAlert, Crown, Users, Mail, Sparkles, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -160,9 +160,9 @@ export function PlanLimitModal({
         <div className="relative overflow-hidden px-6 pt-7 pb-4 text-center bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent border-b border-border/40">
           <div className="mx-auto mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-500 shadow-inner">
             {isAgent ? (
-              <Bot className="h-7 w-7 text-amber-500 animate-pulse" />
+              <Crown className="h-7 w-7 text-amber-500" />
             ) : (
-              <Users className="h-7 w-7 text-amber-500 animate-pulse" />
+              <Users className="h-7 w-7 text-amber-500" />
             )}
           </div>
 
