@@ -221,7 +221,11 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
   try {
     const clerkId = clerkIdOf(req as any);
     const [me] = await db
-      .select({ partnerId: usersTable.partnerId, partnerPermissions: usersTable.partnerPermissions })
+      .select({
+        partnerId: usersTable.partnerId,
+        partnerPermissions: usersTable.partnerPermissions,
+        preferences: usersTable.preferences,
+      })
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkId));
 
@@ -289,6 +293,9 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
       agentLimit = ownPartner.maxAgents ?? null;
       clientLimit = ownPartner.maxClients ?? null;
       partnerSupportEmail = ownPartner.supportEmail ?? null;
+    } else {
+      // Normal direct user: default agent limit is 2 (or upgraded limit from preferences)
+      agentLimit = me?.preferences?.agentLimit ?? 2;
     }
 
     let agentCount = 0;

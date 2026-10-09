@@ -1,7 +1,29 @@
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ShieldAlert, Bot, Users, ArrowUpRight, Mail } from "lucide-react";
+import { ShieldAlert, Bot, Users, Mail, Sparkles, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+
+declare global {
+  interface Window {
+    Razorpay?: new (opts: Record<string, unknown>) => { open(): void };
+  }
+}
+
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== "undefined" && window.Razorpay) {
+      resolve();
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.body.appendChild(s);
+  });
+}
 
 export interface PlanLimitModalProps {
   open: boolean;
@@ -18,13 +40,109 @@ export function PlanLimitModal({
   limit,
   partnerSupportEmail,
 }: PlanLimitModalProps) {
+  const [upgrading, setUpgrading] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   if (!open) return null;
 
   const isAgent = type === "agent";
-  const limitNumber = limit != null && limit > 0 ? limit : (isAgent ? 10 : 3);
+  const limitNumber = limit != null && limit > 0 ? limit : (isAgent ? 2 : 3);
+
+  const handleUpgrade = async () => {
+    try {
+      setUpgrading(true);
+      await loadRazorpayScript();
+
+      const res = await fetch("/api/agents/upgrade-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to create upgrade order");
+      }
+
+      const order = await res.json();
+
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => {
+          if (!settled) {
+            settled = true;
+            fn();
+          }
+        };
+
+        const opts: Record<string, unknown> = {
+          key: order.keyId,
+          amount: order.amount,
+          currency: order.currency || "INR",
+          order_id: order.orderId,
+          name: "SnapServe",
+          description: "Upgrade Plan — +1 Additional Agent Slot",
+          theme: { color: "#6366f1" },
+          modal: {
+            ondismiss: () => settle(() => reject(new Error("cancelled"))),
+          },
+          handler: async (response: {
+            razorpay_order_id: string;
+            razorpay_payment_id: string;
+            razorpay_signature: string;
+          }) => {
+            try {
+              const verifyRes = await fetch("/api/agents/verify-upgrade", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                  razorpayOrderId: response.razorpay_order_id,
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpaySignature: response.razorpay_signature,
+                }),
+              });
+              if (!verifyRes.ok) {
+                const errData = await verifyRes.json().catch(() => ({}));
+                throw new Error(errData.error || "Payment verification failed");
+              }
+              settle(() => resolve());
+            } catch (err) {
+              settle(() => reject(err instanceof Error ? err : new Error("Verification failed")));
+            }
+          },
+        };
+
+        if (!window.Razorpay) {
+          throw new Error("Razorpay SDK could not be loaded");
+        }
+        new window.Razorpay(opts).open();
+      });
+
+      // Refetch context and agents
+      await queryClient.invalidateQueries();
+      toast({
+        title: "Upgrade Successful! 🎉",
+        description: "You unlocked an additional agent slot. You can now create your agent.",
+      });
+      onClose();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg !== "cancelled") {
+        toast({
+          title: "Upgrade Failed",
+          description: msg || "Payment could not be completed. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setUpgrading(false);
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !upgrading) onClose(); }}>
       <DialogContent
         className="sm:max-w-[440px] p-0 overflow-hidden border border-border/80 bg-background/95 backdrop-blur-xl shadow-2xl rounded-2xl"
       >
@@ -40,7 +158,7 @@ export function PlanLimitModal({
 
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 mb-2">
             <ShieldAlert className="h-3.5 w-3.5" />
-            <span>Plan Limit Exceeded</span>
+            <span>Plan Limit Reached</span>
           </div>
 
           <h2 className="text-xl font-bold tracking-tight text-foreground">
@@ -51,28 +169,38 @@ export function PlanLimitModal({
         {/* Modal body */}
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-muted-foreground text-center leading-relaxed">
-            Your existing plan has the limit of{" "}
+            Your existing plan has a limit of{" "}
             <span className="font-semibold text-foreground">
               {limitNumber} {isAgent ? "agents" : "clients"}
             </span>{" "}
-            only. Upgrade your plan for creating more{" "}
-            {isAgent ? "agents" : "clients"}.
+            only. Upgrade your plan to unlock additional {isAgent ? "agents" : "clients"}.
           </p>
 
-          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-950/20 p-3.5 text-center space-y-1.5">
-            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              Please contact your partner for further plan upgrade.
-            </p>
-            <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
-              Contact us at{" "}
-              <a
-                href="mailto:support@snapserve.ai?subject=Plan%20Upgrade%20Request"
-                className="underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
-              >
-                support@snapserve.ai
-              </a>
-            </p>
-          </div>
+          {isAgent && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">Add +1 Agent Slot</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base font-bold text-primary">₹899</span>
+                  <span className="text-xs text-muted-foreground"> + GST</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pay securely via Razorpay (UPI, Cards, NetBanking). Instantly increases your creation limit to {limitNumber + 1} agents.
+              </p>
+            </div>
+          )}
+
+          {partnerSupportEmail ? (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-950/20 p-3.5 text-center space-y-1.5">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                Managed under Partner. Please contact your partner for custom plan upgrades.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* Modal footer / actions */}
@@ -92,13 +220,37 @@ export function PlanLimitModal({
               Contact Partner
             </Button>
           ) : null}
+
           <Button
+            variant="outline"
             size="sm"
-            className="w-full sm:w-auto h-9 text-xs px-5 bg-primary text-primary-foreground hover:bg-primary/90"
+            className="w-full sm:w-auto h-9 text-xs border-border"
+            disabled={upgrading}
             onClick={onClose}
           >
-            Got it
+            Cancel
           </Button>
+
+          {isAgent && (
+            <Button
+              size="sm"
+              className="w-full sm:w-auto h-9 text-xs px-5 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md font-medium"
+              disabled={upgrading}
+              onClick={handleUpgrade}
+            >
+              {upgrading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Opening Razorpay…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Upgrade Now (₹899)
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

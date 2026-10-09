@@ -22,7 +22,7 @@ export const usersTable = pgTable("users", {
   concurrentLimit: integer("concurrent_limit").notNull().default(1),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   onboardingData: jsonb("onboarding_data"),
-  preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system" }>(),
+  preferences: jsonb("preferences").$type<{ theme?: "light" | "dark" | "system"; agentLimit?: number }>(),
   status: text("status").notNull().default("active"),
   // Internal / QA accounts we create for testing. Excluded from real-user
   // analytics by default. Set manually from the admin Users page (or auto-set

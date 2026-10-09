@@ -604,7 +604,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
   const isRefine = typeof refineAgentId === "number" && refineAgentId > 0;
   if (!isRefine) {
     const [userRow] = await db
-      .select({ partnerId: usersTable.partnerId })
+      .select({ partnerId: usersTable.partnerId, preferences: usersTable.preferences })
       .from(usersTable)
       .where(eq(usersTable.clerkId, clerkId));
 
@@ -624,18 +624,24 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       if (p) partnerRecord = p;
     }
 
-    if (partnerRecord?.maxAgents != null) {
+    const DEFAULT_NORMAL_USER_AGENT_LIMIT = 2;
+    const userAgentLimit = userRow?.preferences?.agentLimit ?? DEFAULT_NORMAL_USER_AGENT_LIMIT;
+    const effectiveAgentLimit = partnerRecord ? partnerRecord.maxAgents : userAgentLimit;
+
+    if (effectiveAgentLimit != null) {
       const scope = await resolveWorkspaceScope(clerkId);
       const [countResult] = await db
         .select({ count: count() })
         .from(agentsTable)
         .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
       const currentAgentCount = Number(countResult?.count ?? 0);
-      if (currentAgentCount >= partnerRecord.maxAgents) {
+      if (currentAgentCount >= effectiveAgentLimit) {
         res.status(403).json({
-          error: `Agent limit reached. Your existing plan has the limit of ${partnerRecord.maxAgents} agents only. Please contact your partner for further plan upgrade.`,
+          error: partnerRecord
+            ? `Agent limit reached. Your existing plan has the limit of ${effectiveAgentLimit} agents only. Please contact your partner for further plan upgrade.`
+            : `Agent limit reached. Your plan allows a maximum of ${effectiveAgentLimit} agents. Please contact support to upgrade.`,
           errorCode: "AGENT_LIMIT_REACHED",
-          limit: partnerRecord.maxAgents,
+          limit: effectiveAgentLimit,
           currentCount: currentAgentCount,
         });
         return;

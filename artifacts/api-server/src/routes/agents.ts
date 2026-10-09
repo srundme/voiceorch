@@ -1,8 +1,10 @@
 // agents router — supports call_transfer + webhook (custom function) tools + AMD voicemail detection
 import { Router, type IRouter } from "express";
+import crypto from "crypto";
+import Razorpay from "razorpay";
 import { eq, and, count, desc, asc, isNull, inArray, max, ne, sql } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
-import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, partnersTable, usersTable, type AgentConfig } from "@workspace/db";
+import { db, agentsTable, agentVersionsTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callerSentencesTable, callerFactSentenceLinksTable, callerEpisodeFactLinksTable, providersTable, agentKnowledgeSourcesTable, phoneNumbersTable, callsTable, executionLogsTable, schedulingCalendarsTable, availabilitySchedulesTable, partnersTable, usersTable, walletTransactionsTable, type AgentConfig } from "@workspace/db";
 import { PERSONA_HASH_FACT_KEY } from "../orchestration/callerMemory.js";
 
 /** Internal keys (e.g. __agent_persona_hash) stay in DB for runtime, but never surface in Memory UI. */
@@ -182,7 +184,7 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
 
   // Check partner agent limit if applicable
   const [userRow] = await db
-    .select({ partnerId: usersTable.partnerId })
+    .select({ partnerId: usersTable.partnerId, preferences: usersTable.preferences })
     .from(usersTable)
     .where(eq(usersTable.clerkId, clerkId));
 
@@ -202,17 +204,23 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
     if (p) partnerRecord = p;
   }
 
-  if (partnerRecord?.maxAgents != null) {
+  const DEFAULT_NORMAL_USER_AGENT_LIMIT = 2;
+  const userAgentLimit = userRow?.preferences?.agentLimit ?? DEFAULT_NORMAL_USER_AGENT_LIMIT;
+  const effectiveAgentLimit = partnerRecord ? partnerRecord.maxAgents : userAgentLimit;
+
+  if (effectiveAgentLimit != null) {
     const [countResult] = await db
       .select({ count: count() })
       .from(agentsTable)
       .where(and(inArray(agentsTable.userId, scope.userIds), eq(agentsTable.isTestPersona, false)));
     const currentAgentCount = Number(countResult?.count ?? 0);
-    if (currentAgentCount >= partnerRecord.maxAgents) {
+    if (currentAgentCount >= effectiveAgentLimit) {
       res.status(403).json({
-        error: `Agent limit reached. Your existing plan has the limit of ${partnerRecord.maxAgents} agents only. Please contact your partner for further plan upgrade.`,
+        error: partnerRecord
+          ? `Agent limit reached. Your existing plan has the limit of ${effectiveAgentLimit} agents only. Please contact your partner for further plan upgrade.`
+          : `Agent limit reached. Your plan allows a maximum of ${effectiveAgentLimit} agents. Please contact support to upgrade.`,
         errorCode: "AGENT_LIMIT_REACHED",
-        limit: partnerRecord.maxAgents,
+        limit: effectiveAgentLimit,
         currentCount: currentAgentCount,
       });
       return;
@@ -1283,6 +1291,139 @@ router.get("/agents/:id/latency-stats", requireAuth, clientContext, async (req, 
     : null;
 
   res.json({ callCount: recentCalls.length, sttMs, ttftMs, ttsMs, e2eMs });
+});
+
+/* ─── Plan Upgrade: Buy Additional Agent Slot via Razorpay (₹1,000 / agent) ─── */
+
+function getRazorpayClient(): Razorpay | null {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return null;
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
+}
+
+// POST /agents/upgrade-order — create Razorpay INR order for +1 agent slot
+router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res): Promise<void> => {
+  try {
+    const clerkId = (req as any).clerkUserId as string;
+    const rzp = getRazorpayClient();
+    if (!rzp) {
+      res.status(503).json({ error: "Payment gateway not configured" });
+      return;
+    }
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // 1 Agent = ₹899 (89,900 paise). With 18% GST = ₹161.82 -> ₹1,060.82 (106,082 paise payable)
+    const basePaise = 89900;
+    const gstPaise = Math.round(basePaise * 0.18);
+    const payablePaise = basePaise + gstPaise;
+
+    const orderPayload = {
+      amount: payablePaise,
+      currency: "INR",
+      receipt: `agent_up_${user.id}_${Date.now()}`,
+      notes: {
+        userId: String(user.id),
+        clerkId,
+        type: "agent_slot_upgrade",
+        basePaise: String(basePaise),
+        gstPaise: String(gstPaise),
+      },
+      payment_capture: 1,
+    };
+
+    const order = await (rzp.orders as any).create(orderPayload);
+
+    res.json({
+      orderId: order.id,
+      amount: payablePaise,
+      basePaise,
+      gstPaise,
+      currency: "INR",
+      keyId: process.env.RAZORPAY_KEY_ID,
+      name: "SnapServe",
+      description: "Upgrade Plan — +1 Additional Agent Slot",
+    });
+  } catch (err) {
+    req.log.error({ err }, "agents: failed to create upgrade order");
+    res.status(500).json({ error: "Failed to create payment order" });
+  }
+});
+
+// POST /agents/verify-upgrade — verify signature and increase agentLimit
+router.post("/agents/verify-upgrade", requireAuth, clientContext, async (req, res): Promise<void> => {
+  try {
+    const clerkId = (req as any).clerkUserId as string;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = (req.body ?? {}) as {
+      razorpayOrderId?: string;
+      razorpayPaymentId?: string;
+      razorpaySignature?: string;
+    };
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      res.status(400).json({ error: "Missing payment verification parameters" });
+      return;
+    }
+
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) {
+      res.status(503).json({ error: "Payment gateway not configured" });
+      return;
+    }
+
+    const expectedSig = crypto
+      .createHmac("sha256", secret)
+      .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+      .digest("hex");
+
+    if (expectedSig !== razorpaySignature) {
+      res.status(400).json({ error: "Invalid payment signature" });
+      return;
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.clerkId, clerkId));
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const currentLimit = (user.preferences as any)?.agentLimit ?? 2;
+    const newLimit = currentLimit + 1;
+
+    const updatedPrefs = {
+      ...((user.preferences as Record<string, unknown>) ?? {}),
+      agentLimit: newLimit,
+    };
+
+    await db.update(usersTable)
+      .set({ preferences: updatedPrefs, updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id));
+
+    // Record completed transaction
+    await db.insert(walletTransactionsTable).values({
+      userId: user.id,
+      type: "agent_slot_purchase",
+      amountCents: 89900,
+      description: `Upgraded +1 Agent Slot (New limit: ${newLimit} agents)`,
+      status: "completed",
+      razorpayOrderId,
+      razorpayPaymentId,
+    });
+
+    res.json({
+      ok: true,
+      agentLimit: newLimit,
+      message: `Successfully upgraded! Your new limit is ${newLimit} agents.`,
+    });
+  } catch (err) {
+    req.log.error({ err }, "agents: failed to verify upgrade payment");
+    res.status(500).json({ error: "Failed to verify payment" });
+  }
 });
 
 export default router;
