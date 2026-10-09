@@ -294,8 +294,9 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
       clientLimit = ownPartner.maxClients ?? null;
       partnerSupportEmail = ownPartner.supportEmail ?? null;
     } else {
-      // Normal direct user: default agent limit is 2 (or upgraded limit from preferences)
-      agentLimit = me?.preferences?.agentLimit ?? 2;
+      // Normal direct user: dynamic default limit from env (or upgraded limit from preferences)
+      const defaultLimit = Math.max(1, Number(process.env.NORMAL_USER_DEFAULT_AGENT_LIMIT ?? 2));
+      agentLimit = me?.preferences?.agentLimit ?? defaultLimit;
     }
 
     let agentCount = 0;
@@ -318,6 +319,7 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
       agentCount,
       clientLimit,
       partnerSupportEmail,
+      agentUpgradePriceInr: Math.max(1, Number(process.env.AGENT_SLOT_PRICE_INR ?? 899)),
     });
   } catch (err) {
     req.log.error({ err }, "partner/context failed");

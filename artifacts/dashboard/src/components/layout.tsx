@@ -1032,7 +1032,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const sidebarW = collapsed ? "w-[58px]" : "w-[216px]";
-  const { isLimitReached: isAgentLimitReached, agentLimit, partnerSupportEmail } = useAgentLimit();
+  const { isLimitReached: isAgentLimitReached, agentLimit, partnerSupportEmail, agentUpgradePriceInr } = useAgentLimit();
   const [agentLimitModalOpen, setAgentLimitModalOpen] = useState(false);
 
   const openNewAgent = () => {
@@ -1179,6 +1179,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         type="agent"
         limit={agentLimit}
         partnerSupportEmail={partnerSupportEmail}
+        priceInr={agentUpgradePriceInr}
       />
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />

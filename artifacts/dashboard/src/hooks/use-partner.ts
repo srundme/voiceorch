@@ -52,6 +52,7 @@ export interface PartnerContext {
   agentCount?: number;
   clientLimit?: number | null;
   partnerSupportEmail?: string | null;
+  agentUpgradePriceInr?: number;
 }
 
 /**
@@ -146,6 +147,7 @@ export function useAgentLimit() {
     agentLimit,
     currentCount,
     isLimitReached,
+    agentUpgradePriceInr: partnerCtx?.agentUpgradePriceInr ?? 899,
     partnerSupportEmail: partnerCtx?.partnerSupportEmail ?? partnerCtx?.branding?.supportEmail ?? null,
   };
 }

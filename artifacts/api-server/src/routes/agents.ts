@@ -204,7 +204,7 @@ router.post("/agents", requireAuth, clientContext, async (req, res): Promise<voi
     if (p) partnerRecord = p;
   }
 
-  const DEFAULT_NORMAL_USER_AGENT_LIMIT = 2;
+  const DEFAULT_NORMAL_USER_AGENT_LIMIT = Math.max(1, Number(process.env.NORMAL_USER_DEFAULT_AGENT_LIMIT ?? 2));
   const userAgentLimit = userRow?.preferences?.agentLimit ?? DEFAULT_NORMAL_USER_AGENT_LIMIT;
   const effectiveAgentLimit = partnerRecord ? partnerRecord.maxAgents : userAgentLimit;
 
@@ -1318,8 +1318,9 @@ router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res
       return;
     }
 
-    // 1 Agent = ₹899 (89,900 paise). With 18% GST = ₹161.82 -> ₹1,060.82 (106,082 paise payable)
-    const basePaise = 89900;
+    // Dynamic agent slot price in INR (default ₹899). With 18% GST.
+    const slotPriceInr = Math.max(1, Number(process.env.AGENT_SLOT_PRICE_INR ?? 899));
+    const basePaise = slotPriceInr * 100;
     const gstPaise = Math.round(basePaise * 0.18);
     const payablePaise = basePaise + gstPaise;
 
@@ -1392,7 +1393,8 @@ router.post("/agents/verify-upgrade", requireAuth, clientContext, async (req, re
       return;
     }
 
-    const currentLimit = (user.preferences as any)?.agentLimit ?? 2;
+    const defaultLimit = Math.max(1, Number(process.env.NORMAL_USER_DEFAULT_AGENT_LIMIT ?? 2));
+    const currentLimit = (user.preferences as any)?.agentLimit ?? defaultLimit;
     const newLimit = currentLimit + 1;
 
     const updatedPrefs = {
@@ -1404,11 +1406,14 @@ router.post("/agents/verify-upgrade", requireAuth, clientContext, async (req, re
       .set({ preferences: updatedPrefs, updatedAt: new Date() })
       .where(eq(usersTable.id, user.id));
 
+    const slotPriceInr = Math.max(1, Number(process.env.AGENT_SLOT_PRICE_INR ?? 899));
+    const basePaise = slotPriceInr * 100;
+
     // Record completed transaction
     await db.insert(walletTransactionsTable).values({
       userId: user.id,
       type: "agent_slot_purchase",
-      amountCents: 89900,
+      amountCents: basePaise,
       description: `Upgraded +1 Agent Slot (New limit: ${newLimit} agents)`,
       status: "completed",
       razorpayOrderId,

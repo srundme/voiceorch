@@ -31,6 +31,7 @@ export interface PlanLimitModalProps {
   type: "agent" | "client";
   limit?: number | null;
   partnerSupportEmail?: string | null;
+  priceInr?: number;
 }
 
 export function PlanLimitModal({
@@ -39,10 +40,12 @@ export function PlanLimitModal({
   type,
   limit,
   partnerSupportEmail,
+  priceInr,
 }: PlanLimitModalProps) {
   const [upgrading, setUpgrading] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const price = priceInr && priceInr > 0 ? priceInr : 899;
 
   if (!open) return null;
 
@@ -184,7 +187,7 @@ export function PlanLimitModal({
                   <span className="text-sm font-semibold text-foreground">Add +1 Agent Slot</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-base font-bold text-primary">₹899</span>
+                  <span className="text-base font-bold text-primary">₹{price}</span>
                   <span className="text-xs text-muted-foreground"> + GST</span>
                 </div>
               </div>
@@ -246,7 +249,7 @@ export function PlanLimitModal({
               ) : (
                 <>
                   <Sparkles className="h-3.5 w-3.5" />
-                  Upgrade Now (₹899)
+                  Upgrade Now (₹{price})
                 </>
               )}
             </Button>

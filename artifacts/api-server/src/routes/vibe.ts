@@ -624,7 +624,7 @@ router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): P
       if (p) partnerRecord = p;
     }
 
-    const DEFAULT_NORMAL_USER_AGENT_LIMIT = 2;
+    const DEFAULT_NORMAL_USER_AGENT_LIMIT = Math.max(1, Number(process.env.NORMAL_USER_DEFAULT_AGENT_LIMIT ?? 2));
     const userAgentLimit = userRow?.preferences?.agentLimit ?? DEFAULT_NORMAL_USER_AGENT_LIMIT;
     const effectiveAgentLimit = partnerRecord ? partnerRecord.maxAgents : userAgentLimit;
 
