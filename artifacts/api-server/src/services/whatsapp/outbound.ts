@@ -284,25 +284,46 @@ export async function dispatchWhatsappCallEnded(
   if (!call?.userId) return;
   const userId = call.userId;
 
-  const connections = await db
+  // Only an agent that picked an after-call template gets "skipped" rows and the
+  // account-wide fallback below; the legacy always-on path runs for every call.
+  const explicit = !!opts?.whatsappTemplate?.name;
+
+  const usable = and(
+    eq(whatsappConnectionsTable.userId, call.userId),
+    eq(whatsappConnectionsTable.active, true),
+    eq(whatsappConnectionsTable.postCallEnabled, true),
+  );
+  let connections = await db
     .select()
     .from(whatsappConnectionsTable)
-    .where(and(
-      eq(whatsappConnectionsTable.userId, call.userId),
-      eq(whatsappConnectionsTable.agentId, call.agentId),
-      eq(whatsappConnectionsTable.active, true),
-      eq(whatsappConnectionsTable.postCallEnabled, true),
-    ));
+    .where(and(usable, eq(whatsappConnectionsTable.agentId, call.agentId)));
+  // Connections → WhatsApp sets up one account-wide connection, but the row is
+  // pinned to whichever agent it was first saved with. An agent that turned on
+  // after-call WhatsApp (and picks templates from the account's catalog) uses
+  // the account's most recently updated connection when it has none of its own.
+  let accountFallback = false;
+  if (connections.length === 0 && explicit) {
+    connections = await db
+      .select()
+      .from(whatsappConnectionsTable)
+      .where(usable)
+      .orderBy(desc(whatsappConnectionsTable.updatedAt))
+      .limit(1);
+    accountFallback = connections.length > 0;
+  }
   const withUrl = connections.filter((c) => (c.outboundWebhookUrl ?? "").trim());
   const withMeta = connections.filter(
     (c) => !(c.outboundWebhookUrl ?? "").trim() && c.metaAccessToken && c.metaPhoneNumberId,
   );
+  if (accountFallback) {
+    logger.info(
+      { callId, agentId: call.agentId, connectionId: connections[0]!.id, connectionAgentId: connections[0]!.agentId },
+      "whatsapp: agent has no connection — using the account's connection",
+    );
+  }
 
   const nativeChannel = withUrl.length === 0 && withMeta.length === 0 ? await getActiveChannel(call.userId) : null;
   const agentId = call.agentId ?? null;
-  // Only an agent that picked an after-call template gets "skipped" rows; the
-  // legacy always-on path runs for every call and would flood the Logs otherwise.
-  const explicit = !!opts?.whatsappTemplate?.name;
   const skip = async (reason: string) => {
     if (!explicit) return;
     await logWhatsappAttempt(callId, agentId, {
