@@ -15,13 +15,21 @@ import { formatApiError } from "@/lib/format-api-error";
 const _DASH_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${_DASH_BASE}/api`;
 
-export type WaTplChoice = { name: string; language: string; paramCount: number };
+/** Where one {{n}} placeholder gets its value (mirrors AfterCallTemplateParam in @workspace/db). */
+export type WaTplParamSource =
+  | "auto" | "caller_name" | "agent_name" | "summary" | "phone" | "outcome"
+  | "meeting_time" | "meet_link" | "field" | "text";
+export type WaTplParam = { source: WaTplParamSource; key?: string; text?: string; fallback?: string };
+
+/** params[i] fills {{i+1}}; only after-call messages use it today. */
+export type WaTplChoice = { name: string; language: string; paramCount: number; params?: WaTplParam[] };
 export type WaCatalogEntry = {
   name: string;
   language: string;
   status: string;
   paramCount: number;
   category?: string | null;
+  bodyPreview?: string;
 };
 export type AgentWaTemplates = {
   default?: WaTplChoice;

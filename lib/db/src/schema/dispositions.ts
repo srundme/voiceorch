@@ -36,10 +36,35 @@ export const EMPTY_MEANING_MAP: DispositionMeaningMap = {
   dnc: [],
 };
 
+/** Where the value for one {{n}} placeholder of a WhatsApp template comes from. */
+export type AfterCallTemplateParamSource =
+  | "auto"          // let the sender infer it from the template text (legacy behaviour)
+  | "caller_name"
+  | "agent_name"
+  | "summary"
+  | "phone"
+  | "outcome"
+  | "meeting_time"
+  | "meet_link"
+  | "field"         // a "Data to collect" field, by key
+  | "text";         // fixed text
+
+export type AfterCallTemplateParam = {
+  source: AfterCallTemplateParamSource;
+  /** Field key when source is "field". */
+  key?: string;
+  /** The text when source is "text". */
+  text?: string;
+  /** Used when the source has no value for this call (e.g. no caller name). */
+  fallback?: string;
+};
+
 /** Optional WhatsApp template override (uses agent's linked post-call templates when omitted). */
 export type AfterCallWhatsappTemplate = {
   name: string;
   language: string;
+  /** params[i] fills {{i+1}}. Missing or "auto" entries keep the inferred value. */
+  params?: AfterCallTemplateParam[];
 };
 
 export type AfterCallMessageChannel = {

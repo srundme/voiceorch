@@ -34,9 +34,21 @@ const MeaningMapSchema = z.object({
   dnc:        z.array(z.string()).default([]),
 }).nullable().optional();
 
+const WhatsappTemplateParamSchema = z.object({
+  source: z.enum([
+    "auto", "caller_name", "agent_name", "summary", "phone", "outcome",
+    "meeting_time", "meet_link", "field", "text",
+  ]),
+  key: z.string().max(64).optional(),
+  text: z.string().max(1024).optional(),
+  fallback: z.string().max(1024).optional(),
+});
+
 const WhatsappTemplateSchema = z.object({
   name: z.string().min(1).max(256),
   language: z.string().min(1).max(32).default("en"),
+  /** params[i] fills {{i+1}} of the template body. */
+  params: z.array(WhatsappTemplateParamSchema).max(20).optional(),
 }).nullable().optional();
 
 const AfterCallMessagesSchema = z.object({
