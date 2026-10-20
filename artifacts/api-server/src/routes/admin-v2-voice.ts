@@ -222,10 +222,18 @@ router.get("/admin/voice/calls/:callId", async (req, res): Promise<void> => {
     if (lookup.kind === "id") {
       callId = lookup.id;
     } else {
+      // A phone number opens the latest call to or from it, matching call-search.
       const [match] = await db
         .select({ id: callsTable.id })
         .from(callsTable)
-        .where(ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId)))
+        .where(
+          lookup.kind === "execution"
+            ? ilike(callsTable.executionId, executionIdSearchPattern(lookup.executionId))
+            : or(
+                ilike(callsTable.toNumber, `%${lookup.phone}%`),
+                ilike(callsTable.fromNumber, `%${lookup.phone}%`),
+              ),
+        )
         .orderBy(desc(callsTable.createdAt))
         .limit(1);
       if (!match) {

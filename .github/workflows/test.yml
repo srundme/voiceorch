@@ -23,6 +23,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # api-server imports @snapserve/mcp from its dist/, as in the Dockerfile.
+      - name: Build MCP packages
+        run: pnpm --filter @snapserveai/sdk build && pnpm --filter @snapserve/mcp build
+
       # tsc on api-server needs more than Node's default ~2 GB heap.
       - name: Typecheck
         env:
