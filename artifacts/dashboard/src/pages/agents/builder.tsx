@@ -135,7 +135,8 @@ import {
   type AgentTeamMembership,
 } from "./agent-team";
 import { ToolsWhatsappSetup, ToolsEmailSetup, connectionsSetupHref } from "./tools-messaging";
-import { WhatsappTemplateSelect, type WaCatalogEntry, type WaTplChoice } from "@/components/whatsapp/agent-template-picks";
+import { WhatsappTemplateSelect, type WaCatalogEntry, type WaTplChoice, type WaTplParam } from "@/components/whatsapp/agent-template-picks";
+import { TemplateVariableMapper } from "@/components/whatsapp/template-variable-mapper";
 import { AgentAnalyticsPanel } from "./agent-analytics-panel";
 import {
   PropertyRow,
@@ -5155,10 +5156,21 @@ function readWaTpl(raw: unknown): WaTplChoice | null {
   const name = typeof o.name === "string" ? o.name.trim() : "";
   const language = typeof o.language === "string" ? o.language.trim() : "";
   if (!name || !language) return null;
+  const params = Array.isArray(o.params)
+    ? o.params
+        .filter((p): p is Record<string, unknown> => !!p && typeof p === "object")
+        .map((p) => ({
+          source: (typeof p.source === "string" ? p.source : "auto") as WaTplParam["source"],
+          ...(typeof p.key === "string" ? { key: p.key } : {}),
+          ...(typeof p.text === "string" ? { text: p.text } : {}),
+          ...(typeof p.fallback === "string" ? { fallback: p.fallback } : {}),
+        }))
+    : undefined;
   return {
     name,
     language,
     paramCount: Number.isFinite(Number(o.paramCount)) ? Math.max(0, Number(o.paramCount)) : 0,
+    ...(params?.length ? { params } : {}),
   };
 }
 
@@ -5817,6 +5829,19 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                       requestOutcomesCommit();
                     }}
                   />
+                  <TemplateVariableMapper
+                    catalog={waCatalog}
+                    value={afterCallMessages.universal.whatsappTemplate}
+                    fields={fields}
+                    onChange={(next) => {
+                      setAfterCallMessages((prev) => ({
+                        ...prev,
+                        universal: { ...prev.universal, whatsappTemplate: next },
+                      }));
+                      setDirty(true);
+                    }}
+                    onCommit={requestOutcomesCommit}
+                  />
                 </div>
               )}
               {afterCallMessages.rules.length > 0 && (
@@ -5948,6 +5973,21 @@ function DispositionSettingsPanel({ agentId }: { agentId: number }) {
                             setDirty(true);
                             requestOutcomesCommit();
                           }}
+                        />
+                        <TemplateVariableMapper
+                          catalog={waCatalog}
+                          value={rule.whatsappTemplate}
+                          fields={fields}
+                          onChange={(next) => {
+                            setAfterCallMessages((prev) => ({
+                              ...prev,
+                              rules: prev.rules.map((r) =>
+                                r.id === rule.id ? { ...r, whatsappTemplate: next } : r,
+                              ),
+                            }));
+                            setDirty(true);
+                          }}
+                          onCommit={requestOutcomesCommit}
                         />
                       </div>
                     )}

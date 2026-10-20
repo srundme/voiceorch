@@ -10,11 +10,13 @@ import {
   callsTable,
   campaignLeadsTable,
   type AgentAfterCallMessages,
+  type AfterCallWhatsappTemplate,
   EMPTY_AFTER_CALL_MESSAGES,
 } from "@workspace/db";
 import { logger } from "../lib/logger.js";
 import { dispositionMatchesAny, formatDispositionLabel } from "../lib/disposition-match.js";
 import { dispatchWhatsappCallEnded } from "./whatsapp/outbound.js";
+import { parseTemplateParams } from "./whatsapp/template-params.js";
 import { sendChannelEmail } from "./email-channel.js";
 
 export function parseAfterCallMessages(raw: unknown): AgentAfterCallMessages | null {
@@ -62,13 +64,14 @@ export function parseAfterCallMessages(raw: unknown): AgentAfterCallMessages | n
   };
 }
 
-function parseTemplate(raw: unknown): { name: string; language: string } | null {
+function parseTemplate(raw: unknown): AfterCallWhatsappTemplate | null {
   if (!raw || typeof raw !== "object") return null;
   const t = raw as Record<string, unknown>;
   const name = typeof t["name"] === "string" ? t["name"].trim() : "";
   const language = typeof t["language"] === "string" ? t["language"].trim() : "en";
   if (!name) return null;
-  return { name, language: language || "en" };
+  const params = parseTemplateParams(t["params"]);
+  return { name, language: language || "en", ...(params ? { params } : {}) };
 }
 
 export function normalizeAfterCallMessagesInput(raw: unknown): AgentAfterCallMessages | null {
@@ -172,6 +175,7 @@ export async function maybeRunAgentAfterCallMessages(opts: {
         callSummary: opts.callSummary,
         dispositionResult,
         whatsappTemplate: waTpl ?? undefined,
+        leadName: lead?.name ?? null,
       });
       ran.push("whatsapp");
     } catch (err) {

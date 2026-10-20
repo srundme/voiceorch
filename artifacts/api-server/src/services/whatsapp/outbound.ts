@@ -31,10 +31,14 @@ import {
   catalogBodyPreview,
   isMetaTokenExpiredError,
   resolveMetaTemplate,
+  sanitizeMetaParam,
   sendMetaTemplate,
   type MetaParamContext,
   type MetaTemplateChoice,
 } from "./meta.js";
+import { applyExplicitParams, pickCallerName, resolveTemplateParams } from "./template-params.js";
+import { formatDispositionLabel } from "../../lib/disposition-match.js";
+import type { AfterCallWhatsappTemplate } from "@workspace/db";
 import {
   persistRefreshedMetaToken,
   resolveMetaAccessToken,
@@ -227,7 +231,9 @@ export async function dispatchWhatsappCallEnded(
   opts?: {
     callSummary?: string | null;
     dispositionResult?: unknown;
-    whatsappTemplate?: { name: string; language: string } | null;
+    whatsappTemplate?: AfterCallWhatsappTemplate | null;
+    /** Campaign lead name, used for the caller name when there is no booking. */
+    leadName?: string | null;
   },
 ): Promise<void> {
   const [call] = await db.select().from(callsTable).where(eq(callsTable.id, callId)).limit(1);
@@ -275,6 +281,24 @@ export async function dispatchWhatsappCallEnded(
   }
   const meetingTime = booked.slotStart;
   const meetLink = booked.meetLink || null;
+
+  // The agent's explicit {{n}} mapping, resolved for this call ("" = keep the inferred value).
+  const fields = (
+    opts?.dispositionResult && typeof opts.dispositionResult === "object"
+      ? opts.dispositionResult
+      : call.dispositionResult
+  ) as Record<string, unknown> | null;
+  const callerName = pickCallerName(booked.callerName, opts?.leadName, fields);
+  const explicitParams = resolveTemplateParams(opts?.whatsappTemplate?.params, {
+    callerName,
+    agentName: agent?.name ?? "",
+    summary: (opts?.callSummary ?? call.callSummary ?? "").trim(),
+    phone,
+    outcome: formatDispositionLabel(fields),
+    meetingTime: booked.meetingTime || (meetingTime ? formatMeetingTimeIST(meetingTime) : ""),
+    meetLink: meetLink ?? "",
+    fields,
+  });
 
   const basePayload = buildWhatsappCallEndedPayload({
     call,
@@ -357,10 +381,10 @@ export async function dispatchWhatsappCallEnded(
           tpl,
         );
         const paramCount = catalog.paramCount || tpl.paramCount;
-        const params = buildMetaParams(hint, {
+        const inferred = buildMetaParams(hint, {
           businessName,
           summary,
-          callerName: booked.callerName,
+          callerName,
           doctor: booked.doctor,
           date: booked.date,
           time: booked.time,
@@ -368,6 +392,7 @@ export async function dispatchWhatsappCallEnded(
           meetLink,
           bodyPreview: catalog.bodyPreview,
         }, paramCount);
+        const params = applyExplicitParams(inferred, explicitParams).map(sanitizeMetaParam);
         const result = await sendMetaTemplateFresh(conn, {
           toPhone: phone,
           template: tpl,
@@ -421,6 +446,13 @@ export async function dispatchWhatsappCallEnded(
     params = [businessName, summary || "Our team will call you back soon."];
   } else {
     params = [businessName, summary || "Thanks for speaking with us — we'll be in touch."];
+  }
+  // An explicit mapping also decides how many {{n}} slots this template has.
+  if (explicitParams.some(Boolean)) {
+    params = Array.from(
+      { length: Math.max(params.length, explicitParams.length) },
+      (_, i) => sanitizeMetaParam(explicitParams[i] || params[i]),
+    );
   }
 
   const ctx = await resolveSendContext(channel, async () => {
