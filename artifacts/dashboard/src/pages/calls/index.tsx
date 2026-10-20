@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/popover";
 import { Card, CardContent } from "@/components/ui/card";
 import { CallDetailDrawer } from "@/components/call-detail-drawer";
+import { useCallWhatsappStatuses, WhatsappStatusBadge, type CallWhatsappStatus } from "@/components/whatsapp/whatsapp-status";
 import { EmptyState } from "@/components/empty-state";
 import { MetricCard, MetricStrip } from "@/components/metric-strip";
 import {
@@ -220,10 +221,12 @@ function MiniStat({ label, value, icon }: { label: string; value: string; icon: 
 function CallMobileCard({
   call,
   onOpen,
+  whatsapp,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   call: any;
   onOpen: () => void;
+  whatsapp?: CallWhatsappStatus;
 }) {
   const costCents = (call as { costCents?: number }).costCents ?? 0;
   const isWeb = (call.fromNumber ?? "").startsWith("webcall") || (call.toNumber ?? "").startsWith("webcall");
@@ -241,6 +244,7 @@ function CallMobileCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-medium text-foreground/90 truncate">{call.agentName}</span>
             <StatusBadge status={call.status} />
+            {whatsapp && <WhatsappStatusBadge value={whatsapp} />}
           </div>
           <p className="text-[10px] text-muted-foreground/50 font-mono mt-1">
             {format(parseISO(call.createdAt), "MMM d · HH:mm")} · {getExecutionId(call)}
@@ -505,6 +509,7 @@ export default function CallsList() {
     () => filteredCalls.slice((safePage - 1) * pageSize, safePage * pageSize),
     [filteredCalls, safePage, pageSize]
   );
+  const { data: waStatuses } = useCallWhatsappStatuses(pagedCalls.map((c) => c.id));
 
   const goToPage = (page: number) => {
     if (Number.isNaN(page)) return;
@@ -783,7 +788,7 @@ export default function CallsList() {
                 />
               ) : pagedCalls.length > 0 ? (
                 pagedCalls.map((call) => (
-                  <CallMobileCard key={call.id} call={call} onOpen={() => setSelectedCallId(call.id)} />
+                  <CallMobileCard key={call.id} call={call} whatsapp={waStatuses?.[call.id]} onOpen={() => setSelectedCallId(call.id)} />
                 ))
               ) : (
                 <EmptyState
@@ -815,6 +820,7 @@ export default function CallsList() {
                   <TableHead className="hidden md:table-cell w-[150px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">To</TableHead>
                   <TableHead className="w-[118px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Call Type</TableHead>
                   <TableHead className="w-[112px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Status</TableHead>
+                  <TableHead className="w-[96px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">WhatsApp</TableHead>
                   <TableHead className="hidden lg:table-cell min-w-[120px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70">Disposition</TableHead>
                   <TableHead className="w-[72px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-center">Duration</TableHead>
                   <TableHead className="w-[80px] py-3 px-4 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 text-right">Cost</TableHead>
@@ -831,6 +837,7 @@ export default function CallsList() {
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-32" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-5 w-20 rounded-full mx-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-5 w-16 rounded-full mx-auto" /></TableCell>
+                      <TableCell className="px-4 py-0"><Skeleton className="h-5 w-14 rounded-md mx-auto" /></TableCell>
                       <TableCell className="hidden lg:table-cell px-4 py-0"><Skeleton className="h-3 w-16" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 mx-auto" /></TableCell>
                       <TableCell className="px-4 py-0"><Skeleton className="h-3 w-10 ml-auto" /></TableCell>
@@ -838,7 +845,7 @@ export default function CallsList() {
                   ))
                 ) : callsError ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="p-0 border-0">
+                    <TableCell colSpan={11} className="p-0 border-0">
                       <EmptyState
                         variant="inline"
                         icon={<AlertTriangle />}
@@ -921,6 +928,9 @@ export default function CallsList() {
                         <TableCell className="px-4 py-0 align-middle text-center">
                           <StatusBadge status={call.status} />
                         </TableCell>
+                        <TableCell className="px-4 py-0 align-middle text-center">
+                          <WhatsappStatusBadge value={waStatuses?.[call.id]} />
+                        </TableCell>
                         <TableCell className="hidden lg:table-cell px-4 py-0 align-middle max-w-[180px]">
                           {(() => {
                             const disp = getDispositionValues((call as { dispositionResult?: Record<string, string | number | boolean | null> }).dispositionResult);
@@ -966,7 +976,7 @@ export default function CallsList() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="p-0 border-0">
+                    <TableCell colSpan={11} className="p-0 border-0">
                       <EmptyState
                         variant="inline"
                         icon={<Phone />}

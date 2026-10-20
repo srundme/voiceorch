@@ -635,6 +635,72 @@ router.get("/calls", requireAuth, clientContext, async (req, res): Promise<void>
   res.json(ListCallsResponse.parse(valid));
 });
 
+/**
+ * Latest after-call WhatsApp result per call (from "WhatsApp" execution-log rows),
+ * for the History badge and the call drawer. ?ids=1,2,3 — at most 200, own workspace only.
+ * Calls with no WhatsApp row are omitted.
+ */
+router.get("/calls/whatsapp-status", requireAuth, clientContext, async (req, res): Promise<void> => {
+  const ids = [...new Set(
+    String(req.query["ids"] ?? "")
+      .split(",")
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isSafeInteger(n) && n > 0),
+  )].slice(0, 200);
+  if (ids.length === 0) {
+    res.json({ statuses: {} });
+    return;
+  }
+  const clerkId = (req as any).clerkUserId as string;
+  const scope = await resolveWorkspaceScope(clerkId);
+  const owned = await db
+    .select({ id: callsTable.id })
+    .from(callsTable)
+    .where(and(workspaceCallsWhere(scope.userIds), inArray(callsTable.id, ids)));
+  const ownedIds = owned.map((r) => r.id);
+  if (ownedIds.length === 0) {
+    res.json({ statuses: {} });
+    return;
+  }
+  const rows = await db
+    .selectDistinctOn([executionLogsTable.callId], {
+      callId: executionLogsTable.callId,
+      ts: executionLogsTable.ts,
+      provider: executionLogsTable.provider,
+      requestPayload: executionLogsTable.requestPayload,
+      metadata: executionLogsTable.metadata,
+    })
+    .from(executionLogsTable)
+    .where(and(
+      inArray(executionLogsTable.callId, ownedIds),
+      eq(executionLogsTable.component, "WhatsApp"),
+    ))
+    .orderBy(executionLogsTable.callId, desc(executionLogsTable.ts), desc(executionLogsTable.id));
+
+  const statuses: Record<number, {
+    status: string;
+    reason: string | null;
+    template: string | null;
+    provider: string | null;
+    params: string[];
+    at: string;
+  }> = {};
+  for (const r of rows) {
+    if (r.callId == null) continue;
+    const wa = ((r.metadata as Record<string, unknown> | null)?.["whatsapp"] ?? {}) as Record<string, unknown>;
+    const req = (r.requestPayload ?? {}) as Record<string, unknown>;
+    statuses[r.callId] = {
+      status: typeof wa["status"] === "string" ? wa["status"] : "unknown",
+      reason: typeof wa["reason"] === "string" ? wa["reason"] : null,
+      template: typeof wa["template"] === "string" ? wa["template"] : null,
+      provider: r.provider ?? null,
+      params: Array.isArray(req["params"]) ? (req["params"] as unknown[]).map(String) : [],
+      at: r.ts.toISOString(),
+    };
+  }
+  res.json({ statuses });
+});
+
 router.post("/calls", requireAuth, clientContext, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   const parsed = InitiateCallBody.safeParse(req.body);

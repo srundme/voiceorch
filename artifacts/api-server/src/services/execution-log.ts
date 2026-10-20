@@ -143,7 +143,8 @@ export function writeExecutionLog(
       direction,
       provider: opts.provider ?? null,
       status: opts.status ?? "info",
-      latencyMs: opts.latencyMs ?? null,
+      // latency_ms is an integer column; sub-millisecond timings (e.g. 2.2) failed the insert.
+      latencyMs: opts.latencyMs != null ? Math.round(opts.latencyMs) : null,
       requestPayload: opts.requestPayload ?? null,
       responsePayload: opts.responsePayload ?? null,
       metadata: buildMetadata(opts),

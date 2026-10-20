@@ -55,6 +55,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useCallWhatsappStatuses, WhatsappStatusCard } from "@/components/whatsapp/whatsapp-status";
 
 const TRANSCRIPT_TRANSLATE_LANGUAGES = [
   { value: "en-IN", label: "English" },
@@ -365,6 +366,7 @@ const COMPONENT_COLORS: Record<string, string> = {
   Knowledge:        "bg-teal-500/15    text-teal-700    dark:text-teal-300    border-teal-500/30",
   VariableResolver: "bg-pink-500/15    text-pink-700    dark:text-pink-300    border-pink-500/30",
   Webhook:          "bg-rose-500/15    text-rose-700    dark:text-rose-300    border-rose-500/30",
+  WhatsApp:         "bg-green-500/15   text-green-700   dark:text-green-300   border-green-500/30",
 };
 const DIRECTION_COLORS: Record<string, string> = {
   request:  "bg-blue-500/15  text-blue-700  dark:text-blue-300  border-blue-500/25",
@@ -430,6 +432,13 @@ function getLogPreview(entry: ExecutionLogEvent): string | null {
   const rs = entry.responsePayload as Record<string, unknown> | null;
   const md = entry.metadata as Record<string, unknown> | null;
   const { component, direction } = entry;
+
+  // After-call WhatsApp attempts: say what happened, not just the event name.
+  if (component === "WhatsApp") {
+    const wa = md?.whatsapp as { status?: string; reason?: string | null; template?: string | null } | undefined;
+    const label = wa?.status === "sent" ? "✓ Sent" : wa?.status === "failed" ? "✕ Failed" : "Not sent";
+    return [label, wa?.template, wa?.reason].filter(Boolean).join(" · ");
+  }
 
   // Named pipeline events (First Token Received, Provider Fallback, Barge-in
   // Detected, Call Ended, Provider Initialized, Voice Loaded, Prompt Generated)
@@ -1182,6 +1191,8 @@ export function CallDetailContent({
   const { data: callerMemory } = useGetCallCallerMemory(id, {
     query: { enabled: !!id, queryKey: getGetCallCallerMemoryQueryKey(id) }
   });
+
+  const { data: waStatuses, isLoading: waLoading } = useCallWhatsappStatuses([id]);
 
   const { data: callLogs, isLoading: logsLoading } = useQuery<ExecutionLogEvent[]>({
     queryKey: ["call-logs", id],
@@ -2072,6 +2083,9 @@ export function CallDetailContent({
                 </Card>
               );
             })()}
+
+            {/* After-call WhatsApp: sent / failed (with Meta's reason) / not sent */}
+            <WhatsappStatusCard value={waStatuses?.[id]} loading={waLoading} />
 
             {/* Call Details */}
             <Card>
