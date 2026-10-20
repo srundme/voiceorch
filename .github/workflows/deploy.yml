@@ -1,0 +1,77 @@
+name: Deploy
+
+# Every push to main builds the image here and ships it to the Krutrim VM.
+# The VM side (/home/ubuntu/snapserve/bin/ci-deploy.sh, the only command the
+# deploy key may run) takes a pre-deploy DB dump, swaps the app container,
+# waits for /api/healthz and rolls back on its own if the new image is unhealthy.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      VM: ubuntu@206.1.58.131
+      VM_HOST_KEY: "206.1.58.131 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA0xLGYAkEnZJAidZiRUu79Woxg2knUVqXu1u33HSFq1"
+      DEPLOY_KEY: ${{ secrets.SNAPSERVE_DEPLOY_KEY }}
+    steps:
+      - name: Check deploy key
+        id: gate
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning::SNAPSERVE_DEPLOY_KEY secret is not set; skipping deploy"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      # The image build needs more disk and memory than the runner has by default.
+      - name: Free disk and add swap
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo fallocate -l 8G /mnt/swapfile && sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile && sudo swapon /mnt/swapfile
+          df -h / && free -h
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.gate.outputs.ready == 'true'
+
+      - name: Build image
+        if: steps.gate.outputs.ready == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: snapserve:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ship to the VM and deploy
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          sha=${GITHUB_SHA::7}
+          docker tag "snapserve:$GITHUB_SHA" "snapserve:$sha"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          echo "$VM_HOST_KEY" > ~/.ssh/known_hosts
+          docker save "snapserve:$sha" | gzip -1 \
+            | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "$VM" "deploy $sha"
+
+      - name: Public health check
+        if: steps.gate.outputs.ready == 'true'
+        run: curl -fsS --retry 5 --retry-delay 5 https://app.snapserve.ai/api/healthz
+
+      - name: Remove deploy key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
