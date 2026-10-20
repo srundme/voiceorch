@@ -17,6 +17,7 @@ declare global {
 }
 
 const GST_RATE = 0.18;
+const TXN_PAGE_SIZE = 20;
 const DEFAULT_MIN_TOPUP_INR = 100;
 const USER_TOPUP_PRESETS = [500, 1000, 2000, 5000];
 const PARTNER_TOPUP_PRESETS = [5000, 10000, 25000, 50000];
@@ -81,7 +82,18 @@ export default function WalletPage() {
   const [mandateLoading, setMandateLoading] = useState(false);
 
   const { data: wallet, isLoading: walletLoading } = useGetWallet();
-  const { data: transactions = [] }                 = useListTransactions({ limit: 50, offset: 0 });
+  // One extra row tells us whether a next page exists (the API returns no total).
+  const [txnPage, setTxnPage] = useState(0);
+  const txnParams = { limit: TXN_PAGE_SIZE + 1, offset: txnPage * TXN_PAGE_SIZE };
+  const { data: txnRows = [], isFetching: txnFetching } = useListTransactions(txnParams, {
+    query: { queryKey: getListTransactionsQueryKey(txnParams), placeholderData: (prev) => prev },
+  });
+  const transactions = txnRows.slice(0, TXN_PAGE_SIZE);
+  const txnHasNext = txnRows.length > TXN_PAGE_SIZE;
+  // A refresh can shrink the list under us; step back from an empty page.
+  useEffect(() => {
+    if (txnPage > 0 && !txnFetching && txnRows.length === 0) setTxnPage((p) => p - 1);
+  }, [txnPage, txnFetching, txnRows.length]);
   const { mutateAsync: createTopup }                = useCreateTopup();
   const { mutateAsync: verifyPayment }              = useVerifyPayment();
   const { mutateAsync: updateAutopay }              = useUpdateAutopay();
@@ -570,6 +582,35 @@ export default function WalletPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {(txnPage > 0 || txnHasNext) && transactions.length > 0 && (
+              <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  Showing {txnPage * TXN_PAGE_SIZE + 1}–{txnPage * TXN_PAGE_SIZE + transactions.length}
+                  {txnFetching ? " · loading…" : ""}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={txnPage === 0 || txnFetching}
+                    onClick={() => setTxnPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums">Page {txnPage + 1}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!txnHasNext || txnFetching}
+                    onClick={() => setTxnPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </div>
