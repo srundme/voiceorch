@@ -16,6 +16,7 @@ import {
   callsTable,
   agentsTable,
   bookingsTable,
+  executionLogsTable,
   eventTypesTable,
   schedulingCalendarsTable,
 } from "@workspace/db";
@@ -221,6 +222,49 @@ async function sendMetaTemplateFresh(
   return result;
 }
 
+export type WhatsappAttemptStatus = "sent" | "failed" | "skipped";
+
+type WhatsappAttempt = {
+  status: WhatsappAttemptStatus;
+  provider: "meta" | "vobiz" | "byo" | null;
+  /** Why it was skipped, or the provider's error. */
+  reason?: string;
+  template?: string | null;
+  language?: string | null;
+  params?: string[];
+  messageId?: string | null;
+};
+
+/**
+ * Record an after-call WhatsApp attempt as a "WhatsApp" row in the call's Logs.
+ * History reads the latest row per call for its sent / failed / skipped badge.
+ */
+async function logWhatsappAttempt(callId: number, agentId: number | null, a: WhatsappAttempt): Promise<void> {
+  try {
+    await db.insert(executionLogsTable).values({
+      callId,
+      agentId,
+      component: "WhatsApp",
+      direction: "system",
+      provider: a.provider,
+      status: a.status === "sent" ? "success" : a.status === "failed" ? "error" : "info",
+      requestPayload: a.template
+        ? { template: a.template, language: a.language ?? null, params: a.params ?? [] }
+        : null,
+      responsePayload: a.status === "sent"
+        ? { messageId: a.messageId ?? null }
+        : a.reason ? { error: a.reason } : null,
+      metadata: {
+        event: "After-call WhatsApp",
+        whatsapp: { status: a.status, reason: a.reason ?? null, template: a.template ?? null, provider: a.provider },
+        ...(a.status === "failed" && a.reason ? { errorMessage: a.reason } : {}),
+      },
+    });
+  } catch (err) {
+    logger.warn({ err, callId }, "whatsapp: failed to record attempt in execution logs");
+  }
+}
+
 /**
  * Fire-and-forget post-call notification. BYO webhook connections (if any
  * with a URL) own the notification for this agent; otherwise the user's
@@ -255,7 +299,20 @@ export async function dispatchWhatsappCallEnded(
   );
 
   const nativeChannel = withUrl.length === 0 && withMeta.length === 0 ? await getActiveChannel(call.userId) : null;
-  if (withUrl.length === 0 && withMeta.length === 0 && !nativeChannel) return;
+  const agentId = call.agentId ?? null;
+  // Only an agent that picked an after-call template gets "skipped" rows; the
+  // legacy always-on path runs for every call and would flood the Logs otherwise.
+  const explicit = !!opts?.whatsappTemplate?.name;
+  const skip = async (reason: string) => {
+    if (!explicit) return;
+    await logWhatsappAttempt(callId, agentId, {
+      status: "skipped", provider: null, reason, template: opts?.whatsappTemplate?.name ?? null,
+    });
+  };
+  if (withUrl.length === 0 && withMeta.length === 0 && !nativeChannel) {
+    await skip("No active WhatsApp connection for this agent");
+    return;
+  }
 
   let direction = "inbound";
   try {
@@ -263,7 +320,10 @@ export async function dispatchWhatsappCallEnded(
     if (typeof meta["direction"] === "string") direction = meta["direction"];
   } catch { /* ignore */ }
   const phone = direction === "outbound" ? call.toNumber : call.fromNumber;
-  if (!phone?.trim()) return;
+  if (!phone?.trim()) {
+    await skip("No phone number on the call");
+    return;
+  }
 
   const [agent] = await db
     .select({ name: agentsTable.name })
@@ -277,6 +337,7 @@ export async function dispatchWhatsappCallEnded(
   // A bookings row used to bypass the status gate and fire booking_confirmed.
   if (!callerSpoke) {
     logger.info({ callId, status: call.status, hadBooking: !!booked.slotStart }, "whatsapp: skipped — no caller speech");
+    await skip("The caller never spoke on this call");
     return;
   }
   const meetingTime = booked.slotStart;
@@ -331,6 +392,10 @@ export async function dispatchWhatsappCallEnded(
           { callId, connectionId: conn.id, phone, template_name: mapped },
           "whatsapp: post-call outbound ok",
         );
+        await logWhatsappAttempt(callId, agentId, {
+          status: "sent", provider: "byo", template: mapped || null,
+          reason: "Handed to your WhatsApp provider's webhook",
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await db.update(whatsappConnectionsTable)
@@ -341,6 +406,10 @@ export async function dispatchWhatsappCallEnded(
           { err, callId, connectionId: conn.id },
           "whatsapp: post-call outbound failed",
         );
+        await logWhatsappAttempt(callId, agentId, {
+          status: "failed", provider: "byo", reason: `Webhook failed: ${msg}`.slice(0, 1000),
+          template: opts?.whatsappTemplate?.name ?? null,
+        });
       }
     }
     return;
@@ -354,6 +423,7 @@ export async function dispatchWhatsappCallEnded(
     // Quality gate mirrors native path: skip failed/no-pickup calls unless a booking exists.
     if (call.status !== "completed" && !meetingTime) {
       logger.info({ callId, status: call.status }, "whatsapp-meta: non-completed call without booking — skipped");
+      await skip(`Call ended as "${call.status}"; only completed calls get the message`);
       return;
     }
     for (const conn of withMeta) {
@@ -374,6 +444,9 @@ export async function dispatchWhatsappCallEnded(
             .set({ lastError: "No template linked — open the connection (pencil icon), fetch templates and pick one for Call summary", updatedAt: new Date() })
             .where(eq(whatsappConnectionsTable.id, conn.id))
             .catch(() => {});
+          await logWhatsappAttempt(callId, agentId, {
+            status: "failed", provider: "meta", reason: "No WhatsApp template is linked for this message",
+          });
           continue;
         }
         const catalog = catalogBodyPreview(
@@ -408,6 +481,9 @@ export async function dispatchWhatsappCallEnded(
           { callId, connectionId: conn.id, phone, template: tpl.name, ok: result.ok, ...(result.ok ? {} : { error: result.error }) },
           "whatsapp-meta: post-call send",
         );
+        await logWhatsappAttempt(callId, agentId, result.ok
+          ? { status: "sent", provider: "meta", template: tpl.name, language: tpl.language, params, messageId: result.messageId }
+          : { status: "failed", provider: "meta", template: tpl.name, language: tpl.language, params, reason: result.error });
       } catch (err) {
         // Decrypt failure or other per-connection error — record it and keep
         // processing remaining connections instead of aborting the dispatch.
@@ -417,6 +493,10 @@ export async function dispatchWhatsappCallEnded(
           .where(eq(whatsappConnectionsTable.id, conn.id))
           .catch(() => {});
         logger.warn({ err, callId, connectionId: conn.id }, "whatsapp-meta: post-call send error");
+        await logWhatsappAttempt(callId, agentId, {
+          status: "failed", provider: "meta", reason: `Meta send failed: ${msg}`.slice(0, 1000),
+          template: opts?.whatsappTemplate?.name ?? null,
+        });
       }
     }
     return;
@@ -428,12 +508,14 @@ export async function dispatchWhatsappCallEnded(
 
   if (!hintEnabled(channel, hint)) {
     logger.info({ callId, hint, userId: call.userId }, "whatsapp-native: hint disabled by user — skipped");
+    await skip(`The "${hint}" message is turned off on your WhatsApp channel`);
     return;
   }
   // Quality gate: don't message customers about no-pickup/failed calls unless
   // a booking exists (booking events are always worth confirming).
   if (call.status !== "completed" && !meetingTime) {
     logger.info({ callId, status: call.status }, "whatsapp-native: non-completed call without booking — skipped");
+    await skip(`Call ended as "${call.status}"; only completed calls get the message`);
     return;
   }
 
@@ -468,11 +550,14 @@ export async function dispatchWhatsappCallEnded(
   });
   if ("error" in ctx) {
     logger.warn({ callId, userId: call.userId, error: ctx.error }, "whatsapp-native: post-call send skipped — no send context");
+    await logWhatsappAttempt(callId, agentId, {
+      status: "failed", provider: "vobiz", reason: ctx.error, template: opts?.whatsappTemplate?.name ?? null,
+    });
     return;
   }
 
   // Failures are recorded on the message row + logged by sendWhatsappTemplate.
-  await sendWhatsappTemplate({
+  const sent = await sendWhatsappTemplate({
     channel,
     ctx,
     toPhone: phone,
@@ -484,6 +569,15 @@ export async function dispatchWhatsappCallEnded(
       ? { name: opts.whatsappTemplate.name, lang: opts.whatsappTemplate.language || "en" }
       : undefined,
   });
+  await logWhatsappAttempt(callId, agentId, sent.ok
+    ? { status: "sent", provider: "vobiz", template: opts?.whatsappTemplate?.name ?? hint, params, messageId: sent.vobizMessageId ?? null }
+    : {
+        status: sent.skipped ? "skipped" : "failed",
+        provider: "vobiz",
+        template: opts?.whatsappTemplate?.name ?? hint,
+        params,
+        reason: sent.error ?? "WhatsApp send failed",
+      });
 }
 
 /**

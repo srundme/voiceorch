@@ -38,9 +38,23 @@ export interface MetaTemplateChoice {
 }
 
 function graphError(json: unknown, status: number): string {
-  const j = json as { error?: { message?: string; code?: number } | string } | null;
+  const j = json as {
+    error?: {
+      message?: string;
+      code?: number;
+      error_user_msg?: string;
+      error_data?: { details?: string } | string;
+    } | string;
+  } | null;
   if (typeof j?.error === "string" && j.error) return j.error; // BSP panels return { success:false, error:"..." }
-  if (typeof j?.error === "object" && j.error?.message) return j.error.message;
+  if (typeof j?.error === "object" && j.error?.message) {
+    // "(#100) Invalid parameter" alone doesn't say which parameter; the detail does.
+    const e = j.error;
+    const details = typeof e.error_data === "string" ? e.error_data : e.error_data?.details;
+    return [e.message, e.error_user_msg, details]
+      .filter((x, i, all): x is string => !!x && all.indexOf(x) === i)
+      .join(" — ");
+  }
   return `Meta API HTTP ${status}`;
 }
 
