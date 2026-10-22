@@ -719,6 +719,8 @@ function ClientsTab({ me }: { me: PartnerMe }) {
   const [transferClient, setTransferClient] = useState<PartnerClient | null>(null);
   const [concurrencyClient, setConcurrencyClient] = useState<PartnerClient | null>(null);
   const [permissionsClient, setPermissionsClient] = useState<PartnerClient | null>(null);
+  const [deleteClient, setDeleteClient] = useState<PartnerClient | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [createEmail, setCreateEmail] = useState("");
   const [createName, setCreateName] = useState("");
@@ -743,6 +745,27 @@ function ClientsTab({ me }: { me: PartnerMe }) {
     queryClient.invalidateQueries({ queryKey: ["partner-clients"] });
     queryClient.invalidateQueries({ queryKey: ["partner-me"] });
   };
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ clerkId, confirmEmail }: { clerkId: string; confirmEmail: string }) =>
+      partnerFetch<{ refundCents: number; numbersReturned: number; campaignsPaused: number }>(
+        getToken,
+        `/api/partner/clients/${encodeURIComponent(clerkId)}`,
+        { method: "DELETE", body: JSON.stringify({ confirmEmail }) },
+      ),
+    onSuccess: (r) => {
+      const parts = [
+        r.refundCents > 0 ? `${inr(r.refundCents)} returned to your wallet` : null,
+        r.numbersReturned > 0 ? `${r.numbersReturned} number${r.numbersReturned === 1 ? "" : "s"} back in your pool` : null,
+        r.campaignsPaused > 0 ? `${r.campaignsPaused} campaign${r.campaignsPaused === 1 ? "" : "s"} paused` : null,
+      ].filter(Boolean);
+      toast({ title: "Client deleted", description: parts.join(" · ") || undefined });
+      setDeleteClient(null);
+      setDeleteConfirm("");
+      invalidate();
+    },
+    onError: (err: Error) => toast({ title: "Could not delete client", description: err.message, variant: "destructive" }),
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -989,6 +1012,16 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                         >
                           Visibility
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 w-8 p-0 border-border/80 text-muted-foreground hover:text-destructive hover:border-destructive/50"
+                          title="Delete client"
+                          aria-label={`Delete ${c.name || c.email}`}
+                          onClick={() => { setDeleteClient(c); setDeleteConfirm(""); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -1199,6 +1232,49 @@ function ClientsTab({ me }: { me: PartnerMe }) {
         limit={clientLimit}
         partnerSupportEmail={me.supportEmail}
       />
+      <Dialog open={!!deleteClient} onOpenChange={(o) => { if (!o) { setDeleteClient(null); setDeleteConfirm(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Trash2 className="w-5 h-5 text-destructive shrink-0" />
+              Delete {deleteClient?.name || deleteClient?.email}?
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              They can no longer sign in, and their API keys stop working.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
+            <li>Remaining balance <span className="font-medium text-foreground">{deleteClient ? inr(deleteClient.walletBalanceCents) : ""}</span> is returned to your wallet.</li>
+            <li>Their campaigns are paused and scheduled callbacks cancelled; their agents stop taking calls.</li>
+            <li>Phone numbers on their agents come back to you to reassign.</li>
+            <li>Their call lines are freed for your other clients.</li>
+            <li>Call history and recordings are kept. Creating a client with the same email later reactivates the account.</li>
+          </ul>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Type <span className="font-mono">{deleteClient?.email}</span> to confirm</Label>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={deleteClient?.email ?? ""}
+              autoComplete="off"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => { setDeleteClient(null); setDeleteConfirm(""); }}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deleteMutation.isPending
+                || !deleteClient?.email
+                || deleteConfirm.trim().toLowerCase() !== deleteClient.email.toLowerCase()
+              }
+              onClick={() => deleteClient && deleteMutation.mutate({ clerkId: deleteClient.clerkId, confirmEmail: deleteConfirm.trim() })}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete client"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ClientPermissionsDialog
         open={!!permissionsClient}
         clientName={permissionsClient?.name || permissionsClient?.email || "Client"}
