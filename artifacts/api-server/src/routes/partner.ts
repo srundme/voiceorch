@@ -44,7 +44,11 @@ import {
   agentsTable,
   phoneNumbersTable,
   userApiKeysTable,
+  campaignsTable,
+  campaignBatchesTable,
+  scheduledCallbacksTable,
 } from "@workspace/db";
+import { invalidateUserStatusCache } from "../middlewares/userStatusCache.js";
 import { maskEmail } from "../services/referral-reward.js";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -185,7 +189,7 @@ router.get("/partner/client-agents", requireAuth, async (req, res): Promise<void
     const clients = await db
       .select({ clerkId: usersTable.clerkId, name: usersTable.name, email: usersTable.email })
       .from(usersTable)
-      .where(eq(usersTable.partnerId, partner.id));
+      .where(and(eq(usersTable.partnerId, partner.id), ne(usersTable.status, "deleted")));
     if (clients.length === 0) { res.json({ clients: [] }); return; }
 
     const agents = await db
@@ -354,7 +358,7 @@ router.get("/partner/me", requireAuth, async (req, res): Promise<void> => {
     const [clientCountRow] = await db
       .select({ n: count() })
       .from(usersTable)
-      .where(eq(usersTable.partnerId, partner.id));
+      .where(and(eq(usersTable.partnerId, partner.id), ne(usersTable.status, "deleted")));
     const [pendingInvitesRow] = await db
       .select({ n: count() })
       .from(partnerInvitesTable)
@@ -1347,7 +1351,7 @@ router.get("/partner/clients", requireAuth, async (req, res): Promise<void> => {
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
-      .where(eq(usersTable.partnerId, partner.id))
+      .where(and(eq(usersTable.partnerId, partner.id), ne(usersTable.status, "deleted")))
       .orderBy(desc(usersTable.createdAt));
 
     const start = monthStart();
@@ -1505,6 +1509,175 @@ router.patch("/partner/clients/:clerkId", requireAuth, async (req, res): Promise
     });
   } catch (err) {
     req.log.error({ err }, "partner/clients PATCH failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * Partner deletes a client (soft delete; history, calls and recordings are kept):
+ * refuses while the client has a live call; refunds the remaining balance to the
+ * partner's wallet; pauses campaigns and batches and cancels pending callbacks;
+ * returns phone numbers on the client's agents to the partner; revokes API keys;
+ * frees the client's call lines; blocks login (status=deleted). Re-creating a
+ * client with the same email later reactivates the account.
+ * Body: { confirmEmail } must match the client's email.
+ */
+const LIVE_CALL_STATUSES = ["pending", "queued", "initiated", "ringing", "in_progress", "in-progress"];
+
+router.delete("/partner/clients/:clerkId", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const partner = await requireActivePartner(req, res);
+    if (!partner) return;
+
+    const client = await getOwnedClient(partner.id, String(req.params.clerkId ?? ""));
+    if (!client || client.status === "deleted") {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+    const confirmEmail = String((req.body as { confirmEmail?: unknown } | undefined)?.confirmEmail ?? "").trim().toLowerCase();
+    if (!client.email || confirmEmail !== client.email.toLowerCase()) {
+      res.status(400).json({ error: "Type the client's email to confirm deletion" });
+      return;
+    }
+
+    const [live] = await db
+      .select({ n: count() })
+      .from(callsTable)
+      .where(and(
+        eq(callsTable.userId, client.clerkId),
+        inArray(callsTable.status, LIVE_CALL_STATUSES),
+        gte(callsTable.createdAt, new Date(Date.now() - 2 * 60 * 60 * 1000)),
+      ));
+    if (Number(live?.n ?? 0) > 0) {
+      res.status(409).json({ error: "This client has a call in progress. Try again when it has ended.", code: "CLIENT_CALL_IN_PROGRESS" });
+      return;
+    }
+
+    const [partnerUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.clerkId, partner.userId));
+    if (!partnerUser) {
+      res.status(500).json({ error: "Partner account not found" });
+      return;
+    }
+    const clientLabel = client.name || client.email || client.clerkId;
+
+    const result = await db.transaction(async (tx) => {
+      // Lock the client row so a concurrent call debit or transfer can't race the refund.
+      const [locked] = await tx
+        .select({ id: usersTable.id, walletBalanceCents: usersTable.walletBalanceCents, status: usersTable.status })
+        .from(usersTable)
+        .where(eq(usersTable.clerkId, client.clerkId))
+        .for("update");
+      if (!locked || locked.status === "deleted") return null;
+      const refundCents = Math.max(0, locked.walletBalanceCents);
+
+      await tx
+        .update(usersTable)
+        .set({
+          status: "deleted",
+          suspendedAt: new Date(),
+          suspendedReason: `Deleted by partner ${partner.companyName}`,
+          apiKey: null,
+          orgKey: null,
+          walletBalanceCents: 0,
+          concurrentLimit: 0,
+        })
+        .where(eq(usersTable.id, locked.id));
+
+      if (refundCents > 0) {
+        await tx
+          .update(usersTable)
+          .set({ walletBalanceCents: sql`${usersTable.walletBalanceCents} + ${refundCents}` })
+          .where(eq(usersTable.id, partnerUser.id));
+        await tx.insert(walletTransactionsTable).values([
+          {
+            userId: locked.id,
+            type: "partner_transfer_out",
+            amountCents: -refundCents,
+            description: `Client deleted; balance returned to ${partner.companyName}`,
+            status: "completed",
+          },
+          {
+            userId: partnerUser.id,
+            type: "partner_transfer_in",
+            amountCents: refundCents,
+            description: `Refund from deleted client ${clientLabel}`,
+            status: "completed",
+          },
+        ]);
+      }
+
+      const agentRows = await tx
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(eq(agentsTable.userId, client.clerkId));
+      const agentIds = agentRows.map((a) => a.id);
+      let numbersReturned = 0;
+      if (agentIds.length > 0) {
+        const freed = await tx
+          .update(phoneNumbersTable)
+          .set({ agentId: null })
+          .where(inArray(phoneNumbersTable.agentId, agentIds))
+          .returning({ id: phoneNumbersTable.id });
+        numbersReturned = freed.length;
+        await tx
+          .update(agentsTable)
+          .set({ inboundPhoneNumberId: null, outboundPhoneNumberId: null })
+          .where(inArray(agentsTable.id, agentIds));
+        await tx
+          .update(scheduledCallbacksTable)
+          .set({ status: "cancelled", cancelledAt: new Date() })
+          .where(and(inArray(scheduledCallbacksTable.agentId, agentIds), eq(scheduledCallbacksTable.status, "pending")));
+      }
+      // Numbers the client owned outright (rare: clients can't buy numbers) go to the partner.
+      const moved = await tx
+        .update(phoneNumbersTable)
+        .set({ userId: partner.userId, agentId: null })
+        .where(eq(phoneNumbersTable.userId, client.clerkId))
+        .returning({ id: phoneNumbersTable.id });
+      numbersReturned += moved.length;
+
+      const campaignRows = await tx
+        .update(campaignsTable)
+        .set({ status: "paused", isActive: false })
+        .where(and(eq(campaignsTable.userId, client.clerkId), inArray(campaignsTable.status, ["active", "draft", "running", "scheduled"])))
+        .returning({ id: campaignsTable.id });
+      const allCampaigns = await tx
+        .select({ id: campaignsTable.id })
+        .from(campaignsTable)
+        .where(eq(campaignsTable.userId, client.clerkId));
+      if (allCampaigns.length > 0) {
+        await tx
+          .update(campaignBatchesTable)
+          .set({ status: "paused" })
+          .where(and(
+            inArray(campaignBatchesTable.campaignId, allCampaigns.map((c) => c.id)),
+            inArray(campaignBatchesTable.status, ["draft", "running", "scheduled"]),
+          ));
+      }
+
+      await tx
+        .update(userApiKeysTable)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(userApiKeysTable.userId, client.clerkId), isNull(userApiKeysTable.revokedAt)));
+
+      return { refundCents, numbersReturned, campaignsPaused: campaignRows.length, agents: agentIds.length };
+    });
+
+    if (!result) {
+      res.status(404).json({ error: "Client not found" });
+      return;
+    }
+    invalidateUserStatusCache(client.clerkId);
+    req.log.info(
+      { partnerId: partner.id, clientClerkId: client.clerkId, ...result },
+      "partner deleted client",
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    req.log.error({ err }, "partner/clients DELETE failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
