@@ -9,6 +9,7 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db, agentsTable, callsTable, teamMembersTable, usersTable, partnersTable } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { effectiveClientPermissions } from "../lib/client-permissions.js";
 import { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite, type TeamScopeRow } from "./workspace-scope-logic.js";
 
 export { collectWorkspaceUserIds, isWorkspaceCall, teamRoleCanWrite } from "./workspace-scope-logic.js";
@@ -125,14 +126,16 @@ export async function resolveWorkspaceScope(clerkId: string): Promise<WorkspaceS
     canWrite = teamRoleCanWrite(membership?.role);
   }
 
-  // If this user is managed by an active partner with read_only mode, block edits
-  if (canWrite && me?.partnerId && me.partnerPermissions?.mode === "read_only") {
+  // If this user is managed by an active partner with read_only mode (the client's
+  // own setting, else the partner's setting for all clients), block edits.
+  if (canWrite && me?.partnerId) {
     const [partner] = await db
-      .select({ userId: partnersTable.userId })
+      .select({ userId: partnersTable.userId, defaults: partnersTable.defaultClientPermissions })
       .from(partnersTable)
       .where(and(eq(partnersTable.id, me.partnerId), eq(partnersTable.status, "active")));
+    const mode = partner ? effectiveClientPermissions(me.partnerPermissions, partner.defaults)?.mode : undefined;
     // Self-partner guard: partner themselves is the owner of their partner workspace
-    if (partner && partner.userId !== clerkId) {
+    if (partner && mode === "read_only" && partner.userId !== clerkId) {
       canWrite = false;
     }
   }

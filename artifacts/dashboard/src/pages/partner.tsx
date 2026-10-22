@@ -153,6 +153,18 @@ export const DEFAULT_FULL_PERMISSIONS: PartnerPermissions = {
   mode: "full",
 };
 
+/** What a client actually sees: your Settings for all clients, overridden by the client's own. */
+function effectivePermissions(
+  client: PartnerPermissions | null | undefined,
+  partner: PartnerPermissions | null | undefined,
+): PartnerPermissions | null {
+  if (!client && !partner) return null;
+  return {
+    navVisibility: { ...DEFAULT_FULL_PERMISSIONS.navVisibility, ...partner?.navVisibility, ...client?.navVisibility },
+    mode: client?.mode ?? partner?.mode ?? "full",
+  };
+}
+
 const CAMPAIGN_ONLY_NAV: NavVisibility = {
   agents: false,
   knowledge: false,
@@ -305,13 +317,16 @@ function ClientPermissionsDialog({
 
             <div className="space-y-1 rounded-lg border border-border p-3 bg-card divide-y divide-border/40">
               {[
-                { key: "agents", label: "Agents & Knowledge Base", desc: "Agent builder, prompts & knowledge files" },
-                { key: "campaigns", label: "Campaigns & Outbound Dialing", desc: "Batch campaigns and lead lists" },
-                { key: "callLogs", label: "Call Logs & Analytics", desc: "Transcripts, recordings & analytics" },
+                { key: "agents", label: "Agents", desc: "Agent builder & prompts (agents keep running when hidden)" },
+                { key: "knowledge", label: "Knowledge", desc: "Knowledge packs & files" },
+                { key: "campaigns", label: "Campaigns", desc: "Batch campaigns and lead lists" },
+                { key: "flows", label: "Flows", desc: "Multi-agent workflows" },
+                { key: "connections", label: "Connections", desc: "WhatsApp, CRM, calendar & webhook connections" },
+                { key: "developers", label: "Developers", desc: "API keys & developer docs" },
+                { key: "callLogs", label: "Call Logs", desc: "Transcripts & recordings" },
+                { key: "analytics", label: "Analytics", desc: "Charts & reports" },
                 { key: "phoneNumbers", label: "Phone Numbers", desc: "Assigned phone numbers & caller ID" },
-                { key: "flows", label: "Flows & Connections", desc: "Multi-agent workflows & webhooks" },
                 { key: "bookings", label: "Bookings & Scheduling", desc: "Meetings & scheduling calendar" },
-                { key: "developers", label: "Developer API Keys", desc: "API keys & developer docs" },
                 { key: "settings", label: "Workspace Settings", desc: "General workspace preferences" },
               ].map(({ key, label, desc }) => (
                 <div key={key} className="flex items-center justify-between py-2 first:pt-0 last:pb-0">
@@ -965,6 +980,15 @@ function ClientsTab({ me }: { me: PartnerMe }) {
                         >
                           Edit & View
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 px-3 text-xs font-medium border-border/80 hover:bg-muted"
+                          title="Choose which sections this client sees (overrides your Settings for this client)"
+                          onClick={() => setPermissionsClient(c)}
+                        >
+                          Visibility
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -1178,7 +1202,7 @@ function ClientsTab({ me }: { me: PartnerMe }) {
       <ClientPermissionsDialog
         open={!!permissionsClient}
         clientName={permissionsClient?.name || permissionsClient?.email || "Client"}
-        permissions={permissionsClient?.partnerPermissions ?? null}
+        permissions={effectivePermissions(permissionsClient?.partnerPermissions, me.defaultClientPermissions)}
         onClose={() => setPermissionsClient(null)}
         isSaving={permissionsMutation.isPending}
         onSave={(partnerPermissions) => {
@@ -1692,7 +1716,7 @@ function SettingsTab({ me }: { me: PartnerMe }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-medium">Default Client Access Rights</h2>
+            <h2 className="text-sm font-medium">Client section visibility</h2>
           </div>
           <Button
             size="sm"
@@ -1700,17 +1724,17 @@ function SettingsTab({ me }: { me: PartnerMe }) {
             className="h-8 text-xs"
             onClick={() => setDefaultPermsOpen(true)}
           >
-            Configure Defaults
+            Configure
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground -mt-1">
-          Set the default section visibility and edit rights template automatically assigned to newly onboarded clients.
+          Choose which sections all your clients see (Agents, Knowledge, Flows, Campaigns, Connections, Developers…). It only hides them from the menu; nothing is deleted and agents keep running. Applies to every client right away, unless you set a client its own under Clients → Visibility.
         </p>
       </div>
 
       <ClientPermissionsDialog
         open={defaultPermsOpen}
-        clientName="Default New Clients"
+        clientName="all your clients"
         permissions={me.defaultClientPermissions ?? null}
         onClose={() => setDefaultPermsOpen(false)}
         isSaving={defaultPermsMutation.isPending}

@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, usersTable, partnersTable } from "@workspace/db";
+import { effectiveClientPermissions } from "../lib/client-permissions.js";
 
 /**
  * Managed-client mode (partner acting on behalf of a client).
@@ -46,12 +47,15 @@ export async function getManagingPartner(clientClerkId: string): Promise<Managin
       partnerUserId: partnersTable.userId,
       companyName: partnersTable.companyName,
       allowAgentEdit: usersTable.partnerAllowAgentEdit,
-      partnerPermissions: usersTable.partnerPermissions,
+      clientPermissions: usersTable.partnerPermissions,
+      partnerDefaults: partnersTable.defaultClientPermissions,
     })
     .from(usersTable)
     .innerJoin(partnersTable, eq(usersTable.partnerId, partnersTable.id))
     .where(and(eq(usersTable.clerkId, clientClerkId), eq(partnersTable.status, "active")));
-  return row ?? null;
+  if (!row) return null;
+  const { clientPermissions, partnerDefaults, ...rest } = row;
+  return { ...rest, partnerPermissions: effectiveClientPermissions(clientPermissions, partnerDefaults) };
 }
 
 export function clientContext(req: Request, res: Response, next: NextFunction): void {
