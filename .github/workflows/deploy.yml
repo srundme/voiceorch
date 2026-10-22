@@ -1,8 +1,8 @@
 name: Deploy
 
-# Every push to main builds the image here and ships it to the Krutrim VM.
+# Every push to main builds the image here and ships the changed layers to the Krutrim VM.
 # The VM side (/home/ubuntu/snapserve/bin/ci-deploy.sh, the only command the
-# deploy key may run) takes a pre-deploy DB dump, swaps the app container,
+# deploy key may run) takes a pre-deploy DB dump when the change can touch the database, swaps the app container,
 # waits for /api/healthz and rolls back on its own if the new image is unhealthy.
 on:
   push:
@@ -34,6 +34,38 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.gate.outputs.ready == 'true'
+        with:
+          fetch-depth: 0   # to compare with the commit the VM is running
+
+      - name: Connect to the VM
+        id: vm
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          echo "$VM_HOST_KEY" > ~/.ssh/known_hosts
+          running=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VM" status | sed -n 's/^running=//p')
+          echo "VM is running: ${running:-unknown}"
+          echo "running=$running" >> "$GITHUB_OUTPUT"
+
+      # The pre-deploy dump only matters when the database can change. Skip it when nothing
+      # under lib/db changed and no added line creates, alters or drops tables/columns/indexes.
+      - name: Does this deploy change the database?
+        id: db
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          RUNNING: ${{ steps.vm.outputs.running }}
+        run: |
+          backup=yes
+          if [ -n "$RUNNING" ] && git cat-file -e "$RUNNING^{commit}" 2>/dev/null; then
+            if git diff --quiet "$RUNNING" "$GITHUB_SHA" -- lib/db \
+              && ! git diff "$RUNNING" "$GITHUB_SHA" -- '*.ts' '*.sql' \
+                   | grep -qiE '^\+.*\b(create|alter|drop)[[:space:]]+(table|index|column|type|schema)\b'; then
+              backup=no
+            fi
+          fi
+          echo "pre-deploy backup: $backup"
+          echo "backup=$backup" >> "$GITHUB_OUTPUT"
 
       # The image build needs more disk and memory than the runner has by default.
       - name: Free disk and add swap
@@ -57,16 +89,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Ship to the VM and deploy
+      # Push through an SSH tunnel into the VM's localhost-only image store. Layers the store
+      # already has are skipped, so a normal deploy uploads tens of MB instead of the whole image.
+      - name: Ship changed layers to the VM and deploy
         if: steps.gate.outputs.ready == 'true'
+        env:
+          BACKUP: ${{ steps.db.outputs.backup }}
         run: |
           sha=${GITHUB_SHA::7}
-          docker tag "snapserve:$GITHUB_SHA" "snapserve:$sha"
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
-          echo "$VM_HOST_KEY" > ~/.ssh/known_hosts
-          docker save "snapserve:$sha" | gzip -1 \
-            | ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "$VM" "deploy $sha"
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=30 -N -L 5000:127.0.0.1:5000 "$VM" &
+          tunnel=$!
+          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:5000/v2/ && break; sleep 1; done
+          docker tag "snapserve:$GITHUB_SHA" "127.0.0.1:5000/snapserve:$sha"
+          docker push "127.0.0.1:5000/snapserve:$sha"
+          kill "$tunnel" || true
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "$VM" "pull $sha ${BACKUP:-yes}"
 
       - name: Public health check
         if: steps.gate.outputs.ready == 'true'
