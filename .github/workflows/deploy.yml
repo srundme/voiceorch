@@ -47,6 +47,18 @@ jobs:
           running=$(ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$VM" status | sed -n 's/^running=//p')
           echo "VM is running: ${running:-unknown}"
           echo "running=$running" >> "$GITHUB_OUTPUT"
+          echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # Tunnel to the VM's localhost-only image store; the build pushes straight into it.
+      # The deploy key may forward only to 127.0.0.1:5000.
+      - name: Open tunnel to the VM image store
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          nohup ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
+            -o ServerAliveInterval=30 -N -L 5000:127.0.0.1:5000 "$VM" > /tmp/tunnel.log 2>&1 &
+          echo $! > /tmp/tunnel.pid
+          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:5000/v2/ && exit 0; sleep 1; done
+          cat /tmp/tunnel.log; exit 1
 
       # The pre-deploy dump only matters when the database can change. Skip it when nothing
       # under lib/db changed and no added line creates, alters or drops tables/columns/indexes.
@@ -76,40 +88,42 @@ jobs:
           sudo mkswap /mnt/swapfile && sudo swapon /mnt/swapfile
           df -h / && free -h
 
+      # BuildKit on the host network so it reaches the tunnel, and plain HTTP for that registry.
       - uses: docker/setup-buildx-action@v3
         if: steps.gate.outputs.ready == 'true'
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."127.0.0.1:5000"]
+              http = true
+              insecure = true
 
       - name: Build image
         if: steps.gate.outputs.ready == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: true
-          tags: snapserve:${{ github.sha }}
+          # BuildKit checks each layer by digest and uploads only those the VM store lacks.
+          push: true
+          tags: 127.0.0.1:5000/snapserve:${{ steps.vm.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Push through an SSH tunnel into the VM's localhost-only image store. Layers the store
-      # already has are skipped, so a normal deploy uploads tens of MB instead of the whole image.
-      - name: Ship changed layers to the VM and deploy
+      - name: Deploy on the VM
         if: steps.gate.outputs.ready == 'true'
         env:
           BACKUP: ${{ steps.db.outputs.backup }}
+          SHORT: ${{ steps.vm.outputs.short }}
         run: |
-          sha=${GITHUB_SHA::7}
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ExitOnForwardFailure=yes \
-            -o ServerAliveInterval=30 -N -L 5000:127.0.0.1:5000 "$VM" &
-          tunnel=$!
-          for i in $(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:5000/v2/ && break; sleep 1; done
-          docker tag "snapserve:$GITHUB_SHA" "127.0.0.1:5000/snapserve:$sha"
-          docker push "127.0.0.1:5000/snapserve:$sha"
-          kill "$tunnel" || true
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "$VM" "pull $sha ${BACKUP:-yes}"
+          kill "$(cat /tmp/tunnel.pid)" 2>/dev/null || true
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o ServerAliveInterval=30 "$VM" "pull $SHORT ${BACKUP:-yes}"
 
       - name: Public health check
         if: steps.gate.outputs.ready == 'true'
         run: curl -fsS --retry 5 --retry-delay 5 https://app.snapserve.ai/api/healthz
 
-      - name: Remove deploy key
+      - name: Close tunnel and remove deploy key
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: |
+          kill "$(cat /tmp/tunnel.pid 2>/dev/null)" 2>/dev/null || true
+          rm -f ~/.ssh/deploy_key
