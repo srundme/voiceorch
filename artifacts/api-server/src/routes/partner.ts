@@ -56,6 +56,7 @@ import {
   sendPartnerEmail,
 } from "../services/partner-mail.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
+import { effectiveClientPermissions } from "../lib/client-permissions.js";
 import { hashPassword } from "../lib/password.js";
 import {
   customDomainDnsGuide,
@@ -269,7 +270,18 @@ router.get("/partner/context", requireAuth, async (req, res): Promise<void> => {
 
     const isPartner = !!ownPartner && ownPartner.status === "active";
     const isManagedClient = branding !== null && !isPartner;
-    const permissions = me?.partnerPermissions ?? null;
+    let partnerDefaults: unknown = null;
+    if (isManagedClient && me?.partnerId) {
+      const [p] = await db
+        .select({ defaults: partnersTable.defaultClientPermissions })
+        .from(partnersTable)
+        .where(eq(partnersTable.id, me.partnerId));
+      partnerDefaults = p?.defaults ?? null;
+    }
+    // Partner's section visibility for all clients, overridden per client.
+    const permissions = isManagedClient
+      ? effectiveClientPermissions(me?.partnerPermissions, partnerDefaults)
+      : (me?.partnerPermissions ?? null);
 
     let agentLimit: number | null = null;
     let clientLimit: number | null = null;
@@ -1227,7 +1239,8 @@ router.post("/partner/clients", requireAuth, async (req, res): Promise<void> => 
 
     const displayName = (name ?? "").trim().slice(0, 80) || cleanEmail.split("@")[0]!;
     const passwordHash = await hashPassword(pwd);
-    const clientPermissionsToSet = reqPermissions !== undefined ? reqPermissions : (partner.defaultClientPermissions ?? null);
+    // No frozen copy of the partner's defaults: they apply live (see effectiveClientPermissions).
+    const clientPermissionsToSet = reqPermissions !== undefined ? reqPermissions : null;
 
     let user: typeof usersTable.$inferSelect;
     if (existing) {

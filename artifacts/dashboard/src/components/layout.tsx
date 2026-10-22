@@ -662,7 +662,7 @@ function SidebarContent({
       </div>
 
       {/* + New agent CTA */}
-      {!isReadOnly && (
+      {!isReadOnly && isNavSectionVisible("Agents", partnerCtx?.partnerPermissions?.navVisibility) && (
         <div className="shrink-0 px-2 pb-2">
           <button
             type="button"
@@ -805,7 +805,13 @@ const MOBILE_BOTTOM_NAV_ITEMS = [
 function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   const [location] = useLocation();
   const isReadOnly = useIsPartnerReadOnly();
-  const items = MOBILE_BOTTOM_NAV_ITEMS.filter((item) => !isReadOnly || item.href !== null);
+  const { data: partnerCtx } = usePartnerContext();
+  const vis = partnerCtx?.partnerPermissions?.navVisibility;
+  const items = MOBILE_BOTTOM_NAV_ITEMS.filter((item) =>
+    item.href === null
+      ? !isReadOnly && isNavSectionVisible("Agents", vis)
+      : isNavSectionVisible(item.name, vis),
+  );
   return (
     <nav
       className="md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-sidebar/95 backdrop-blur-md pb-safe"
