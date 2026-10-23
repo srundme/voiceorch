@@ -386,6 +386,12 @@ router.post("/mcp/oauth/revoke", async (req, res): Promise<void> => {
 
 /* ── Streamable HTTP MCP ─────────────────────────────────────────────────── */
 
+/** The session, only when it was opened with this same credential. */
+function ownedSession(sessionId: string, apiKey: string) {
+  const entry = sessions.get(sessionId);
+  return entry && entry.apiKey === apiKey ? entry : undefined;
+}
+
 async function handleMcpPost(req: Request, res: Response): Promise<void> {
   const apiKey = (req as any).mcpApiKey as string;
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
@@ -393,16 +399,10 @@ async function handleMcpPost(req: Request, res: Response): Promise<void> {
   try {
     let transport: StreamableHTTPServerTransport;
 
-    if (sessionId && sessions.has(sessionId)) {
-      const entry = sessions.get(sessionId)!;
-      if (entry.apiKey !== apiKey) {
-        res.status(403).json({
-          jsonrpc: "2.0",
-          error: { code: -32001, message: "Session belongs to a different credential" },
-          id: null,
-        });
-        return;
-      }
+    // A session opened with another credential is treated as unknown (404 below), so a
+    // client that reconnected with a new key re-initializes instead of failing with 403.
+    const entry = sessionId ? ownedSession(sessionId, apiKey) : undefined;
+    if (entry) {
       entry.lastSeenAt = Date.now();
       transport = entry.transport;
       await transport.handleRequest(req, res, req.body);
@@ -467,14 +467,9 @@ async function handleMcpGet(req: Request, res: Response): Promise<void> {
     res.status(400).send("Missing session ID");
     return;
   }
-  if (!sessions.has(sessionId)) {
+  const entry = ownedSession(sessionId, (req as any).mcpApiKey as string);
+  if (!entry) {
     res.status(404).send("Session not found");
-    return;
-  }
-  const entry = sessions.get(sessionId)!;
-  const apiKey = (req as any).mcpApiKey as string;
-  if (entry.apiKey !== apiKey) {
-    res.status(403).send("Session belongs to a different credential");
     return;
   }
   await entry.transport.handleRequest(req, res);
@@ -482,13 +477,8 @@ async function handleMcpGet(req: Request, res: Response): Promise<void> {
 
 async function handleMcpDelete(req: Request, res: Response): Promise<void> {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (!sessionId || !sessions.has(sessionId)) {
+  if (!sessionId || !ownedSession(sessionId, (req as any).mcpApiKey as string)) {
     res.status(404).send("Unknown session");
-    return;
-  }
-  const entry = sessions.get(sessionId)!;
-  if (entry.apiKey !== (req as any).mcpApiKey) {
-    res.status(403).send("Session belongs to a different credential");
     return;
   }
   closeSession(sessionId);
