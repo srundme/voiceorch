@@ -1,6 +1,6 @@
 name: Deploy
 
-# Every push to main builds the image here and ships the changed layers to the Krutrim VM.
+# Every push to main builds the image here and ships the changed layers to the AWS server (EC2 Mumbai).
 # The VM side (/home/ubuntu/snapserve/bin/ci-deploy.sh, the only command the
 # deploy key may run) takes a pre-deploy DB dump when the change can touch the database, swaps the app container,
 # waits for /api/healthz and rolls back on its own if the new image is unhealthy.
@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      VM: ubuntu@206.1.58.131
-      VM_HOST_KEY: "206.1.58.131 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA0xLGYAkEnZJAidZiRUu79Woxg2knUVqXu1u33HSFq1"
+      VM: ubuntu@13.206.129.250
+      VM_HOST_KEY: "13.206.129.250 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIy5Ydf3JAxHcuejZS3Lv1v/+hqlN21X7vjExM4nFRqU"
       DEPLOY_KEY: ${{ secrets.SNAPSERVE_DEPLOY_KEY }}
     steps:
       - name: Check deploy key
