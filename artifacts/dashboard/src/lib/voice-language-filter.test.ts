@@ -37,6 +37,17 @@ describe("orderVoicesByLanguage", () => {
   it("puts Hindi matches first", () => {
     expect(orderVoicesByLanguage(VOICES, "hi-IN").map(v => v.id)).toEqual(["a", "b", "c"]);
   });
+
+  it("sorts each group by name, ignoring case and database order", () => {
+    const shuffled = [
+      { id: "s", name: "Shivaram", language: "ta" },
+      { id: "k", name: "karthikeyan", language: "en" },
+      { id: "a", name: "Aarthi", language: "ta" },
+      { id: "m", name: "Mahesh", language: "en" },
+    ];
+    expect(orderVoicesByLanguage(shuffled, "ta-IN").map(v => v.id)).toEqual(["a", "s", "k", "m"]);
+    expect(orderVoicesByLanguage(shuffled, "en-IN").map(v => v.id)).toEqual(["a", "k", "m", "s"]);
+  });
 });
 
 describe("shouldClearVoiceForLanguage", () => {

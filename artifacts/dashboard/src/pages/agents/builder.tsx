@@ -310,6 +310,63 @@ function SmallSelect({ value, onChange, options, placeholder }: {
   );
 }
 
+/** Searchable voice dropdown: the curated list runs past a thousand voices. */
+function VoicePicker({ value, onChange, options, placeholder, size = "sm" }: {
+  value: string | undefined;
+  onChange: (v: string) => void;
+  options: { value: string; label: string; recommended?: boolean }[];
+  placeholder?: string;
+  size?: "sm" | "md";
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? options.find((o) => o.value === value) : undefined;
+  return (
+    // modal: lets the list scroll when the picker sits inside a dialog.
+    <Popover open={open} onOpenChange={setOpen} modal>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "flex w-full items-center justify-between gap-2 rounded-md border border-input px-3 text-left",
+            size === "sm" ? "h-8 bg-background/50 text-xs" : "h-9 bg-background text-sm",
+          )}
+        >
+          <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>
+            {selected
+              ? <VoiceOptionLabel label={selected.label} recommended={selected.recommended} />
+              : (placeholder ?? "Select…")}
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search voices…" className="text-xs" />
+          <CommandList className="max-h-[300px]">
+            <CommandEmpty>No voice matches.</CommandEmpty>
+            <CommandGroup>
+              {options.filter((o) => o.value !== "").map((o) => (
+                <CommandItem
+                  key={o.value}
+                  // Names repeat ("Aarthi" ×4), so the id keeps each item unique.
+                  value={`${o.label} ${o.value}`}
+                  onSelect={() => { onChange(o.value); setOpen(false); }}
+                  className={cn("gap-2", size === "sm" ? "text-xs" : "text-sm")}
+                >
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", o.value === value ? "opacity-100" : "opacity-0")} />
+                  <VoiceOptionLabel label={o.label} recommended={o.recommended} />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Resolve a friendly voice label from whitelist, static catalog, or truncated ID. */
 function resolveVoiceLabel(
   voiceId: string | undefined | null,
@@ -1579,7 +1636,7 @@ function OverviewTab({
                     <FormField control={form.control} name="ttsVoice" render={({ field }) => (
                       <FormItem className="space-y-0">
                         <FormControl>
-                          <SmallSelect
+                          <VoicePicker
                             value={ttsVoiceDropdownVal}
                             onChange={(v) => {
                               if (v === "__custom__") {
@@ -2943,13 +3000,14 @@ function VoiceTab({ form }: { form: any }) {
                       Default stack
                     </p>
                   )}
-                  <Select
+                  <VoicePicker
+                    size="md"
                     value={
                       dropdownValV && ttsVoiceOptsV.some((v) => v.value === dropdownValV)
                         ? dropdownValV
                         : undefined
                     }
-                    onValueChange={(v) => {
+                    onChange={(v) => {
                       if (v === "__custom__") {
                         setVoiceCustomModeV(true);
                         return;
@@ -2957,18 +3015,9 @@ function VoiceTab({ form }: { form: any }) {
                       setVoiceCustomModeV(false);
                       field.onChange(v);
                     }}
-                  >
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select a voice…" />
-                    </SelectTrigger>
-                    <SelectContent position="popper" className="max-h-[300px]">
-                      {ttsVoiceOptsV.filter((v) => v.value !== "").map(v => (
-                        <SelectItem key={v.value} value={v.value} className="text-sm">
-                          <VoiceOptionLabel label={v.label} recommended={v.recommended} />
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={ttsVoiceOptsV}
+                    placeholder="Select a voice…"
+                  />
                   <div className="flex flex-wrap items-center gap-2 pt-0.5">
                     {previewVoiceControl}
                     {ttsProvider === "cartesia" && (
