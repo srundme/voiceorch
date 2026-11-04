@@ -7,7 +7,7 @@ import {
   TestTube2, ChevronRight,
   Volume2, Check, X, Pencil, ChevronDown, List, Globe, BarChart3,
   User2, Users, Sparkles, CopyPlus, BookOpen, ToggleLeft, ToggleRight, Tag, Loader2, Square, AudioLines,
-  Play, Pause, Copy,
+  Play, Pause, Copy, Link2,
   Timer, ShieldCheck, Layers, Gauge, MicOff, HelpCircle, PhoneOff, Mail, MessageCircle,
   History, GitBranch, Eye, RotateCcw, ChevronUp, AlertTriangle, ArrowLeftRight,
   Upload, Archive, Info, AlertCircle, Calendar, Star, BadgeCheck, Video, ExternalLink,
@@ -18,6 +18,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import { WebcallPanel } from "@/components/webcall-panel";
+import { AgentShareLinksDialog } from "./share-links";
 import { AgentConfigCard, EditConfigDialog } from "@/components/agent-config-card";
 import { GeminiLiveVoicePicker } from "@/components/gemini-live-voice-picker";
 import { OpenAIRealtimeVoicePicker } from "@/components/openai-realtime-voice-picker";
@@ -8269,6 +8270,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
   };
 
   const [showWebcall, setShowWebcall] = useState(() => _autoWebcall);
+  const [shareOpen, setShareOpen] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const isDirty   = form.formState.isDirty;
 
@@ -8402,6 +8404,17 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
             <Play className="size-3.5" />
             {showWebcall ? "Close test" : "Live test"}
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="hidden h-8 gap-1.5 px-2.5 text-[11px] sm:inline-flex"
+            onClick={() => setShareOpen(true)}
+            title="Shareable web call link"
+          >
+            <Link2 className="size-3.5" />
+            Share
+          </Button>
           {isReadOnly ? (
             <Button
               type="button"
@@ -8438,6 +8451,9 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
               </DropdownMenuItem>
               <DropdownMenuItem className="sm:hidden" onClick={() => setShowWebcall((v) => !v)}>
                 <Mic className="mr-2 size-3.5" /> Live test
+              </DropdownMenuItem>
+              <DropdownMenuItem className="sm:hidden" onClick={() => setShareOpen(true)}>
+                <Link2 className="mr-2 size-3.5" /> Share link
               </DropdownMenuItem>
               {!isReadOnly && (
                 <DropdownMenuItem onClick={() => {
@@ -8503,6 +8519,14 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AgentShareLinksDialog
+        agentId={agent.id}
+        agentName={agent.name ?? "Agent"}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        readOnly={isReadOnly}
+      />
 
       {showWebcall && (
         <div
