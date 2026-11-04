@@ -54,6 +54,20 @@ registerProcessor('pcm-capture', PcmCaptureProcessor);
 
 const TARGET_RATE = 16000;
 
+// Agent audio arrives as 20 ms frames paced in real time, with no headroom, so
+// playing each frame the moment it lands turned any network jitter into a gap
+// (choppy voice). Each burst starts this far ahead instead, and the buffer
+// grows a little every time it still runs dry mid-sentence.
+const JITTER_BUFFER_START_S = 0.12;
+const JITTER_BUFFER_STEP_S  = 0.04;
+const JITTER_BUFFER_MAX_S   = 0.3;
+/** A gap shorter than this between frames is a mid-sentence underrun, not a new reply. */
+const UNDERRUN_WINDOW_S     = 0.5;
+/** Past this much queued audio, silent keepalive / ambient frames are dropped. */
+const MAX_QUEUED_SILENCE_S  = 1.0;
+/** Peak below this (of 1.0) counts as silence. */
+const SILENCE_PEAK          = 0.004;
+
 export function WebcallPanel({
   agentId,
   agentName,
@@ -94,8 +108,14 @@ export function WebcallPanel({
   const callIdRef      = useRef<number | null>(null);
   const doneRef        = useRef(false);
   const ignoreAudioUntilRef = useRef(0);
+  const jitterBufferRef = useRef(JITTER_BUFFER_START_S);
+  // Bumped by teardown so a start() still waiting on the mic or the network
+  // knows it was cancelled and must not open a second, hidden call.
+  const generationRef  = useRef(0);
+  const startingRef    = useRef(false);
 
   const teardown = useCallback(() => {
+    generationRef.current++;
     try { wsRef.current?.close(); } catch { /* noop */ }
     wsRef.current = null;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
@@ -113,6 +133,7 @@ export function WebcallPanel({
     nextStartRef.current = 0;
     callIdRef.current = null;
     ignoreAudioUntilRef.current = 0;
+    jitterBufferRef.current = JITTER_BUFFER_START_S;
   }, []);
 
   const enqueueAudio = useCallback((buf: ArrayBuffer) => {
@@ -123,14 +144,29 @@ export function WebcallPanel({
     if (pcm.length === 0) return;
     const audioBuf = ctx.createBuffer(1, pcm.length, audioRateRef.current); // rate negotiated via "ready" (16k HD, 8k fallback)
     const ch = audioBuf.getChannelData(0);
-    for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 0x8000;
+    let peak = 0;
+    for (let i = 0; i < pcm.length; i++) {
+      const v = pcm[i] / 0x8000;
+      ch[i] = v;
+      if (v > peak) peak = v; else if (-v > peak) peak = -v;
+    }
+    const now = ctx.currentTime;
+    const prevEnd = nextStartRef.current;
+    // Keepalive / ambient silence must not pile up ahead of the next sentence.
+    if (prevEnd - now > MAX_QUEUED_SILENCE_S && peak < SILENCE_PEAK) return;
+    let start = prevEnd;
+    if (prevEnd <= now) {
+      // Queue ran dry. Right after a frame ended = jitter underrun: widen the buffer.
+      if (prevEnd > 0 && now - prevEnd < UNDERRUN_WINDOW_S) {
+        jitterBufferRef.current = Math.min(JITTER_BUFFER_MAX_S, jitterBufferRef.current + JITTER_BUFFER_STEP_S);
+      }
+      start = now + jitterBufferRef.current;
+    }
+    // Always append after the queued audio. Starting a late frame "now" played
+    // it on top of what was queued and garbled the voice.
     const src = ctx.createBufferSource();
     src.buffer = audioBuf;
     src.connect(ctx.destination);
-    // Keepalive / TTS bursts used to schedule seconds ahead of currentTime, so
-    // the next real sentence waited behind a growing silence queue.
-    const lead = nextStartRef.current - ctx.currentTime;
-    const start = lead > 0.12 ? ctx.currentTime : Math.max(ctx.currentTime, nextStartRef.current);
     src.start(start);
     nextStartRef.current = start + audioBuf.duration;
     activeSources.current.push(src);
@@ -143,10 +179,27 @@ export function WebcallPanel({
     ignoreAudioUntilRef.current = Date.now() + 1000;
     for (const s of activeSources.current) { try { s.stop(); } catch { /* noop */ } }
     activeSources.current = [];
-    nextStartRef.current = playbackCtxRef.current?.currentTime ?? 0;
+    // 0 = "nothing queued", so the next reply is not mistaken for an underrun.
+    nextStartRef.current = 0;
   }, []);
 
   const start = useCallback(async () => {
+    // One call per panel: a double click, or a click while connecting, used to
+    // open a second call that talked over the first.
+    if (startingRef.current || wsRef.current) return;
+    startingRef.current = true;
+    const generation = ++generationRef.current;
+    const cancelled = () => generationRef.current !== generation;
+    let stream: MediaStream | null = null;
+    let capture: AudioContext | null = null;
+    let playback: AudioContext | null = null;
+    // Panel closed / call ended while we were still awaiting: release what this
+    // attempt created (teardown already ran) and stop before opening a socket.
+    const abandon = () => {
+      stream?.getTracks().forEach((t) => t.stop());
+      try { void capture?.close(); } catch { /* noop */ }
+      try { void playback?.close(); } catch { /* noop */ }
+    };
     setError(null);
     setNotice(null);
     setLines([]);
@@ -164,14 +217,16 @@ export function WebcallPanel({
             throw new Error("Insufficient balance. Please top up your wallet to start calls.");
           }
         }
+        if (cancelled()) return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
       });
+      if (cancelled()) { abandon(); return; }
       streamRef.current = stream;
 
-      const capture = new AudioContext({ sampleRate: 16000 });
+      capture = new AudioContext({ sampleRate: 16000 });
       captureCtxRef.current = capture;
       await capture.resume();
       try {
@@ -184,6 +239,7 @@ export function WebcallPanel({
           URL.revokeObjectURL(blobUrl);
         }
       }
+      if (cancelled()) { abandon(); return; }
 
       const srcNode = capture.createMediaStreamSource(stream);
       sourceNodeRef.current = srcNode;
@@ -244,10 +300,12 @@ export function WebcallPanel({
       worklet.connect(sink);
       sink.connect(capture.destination);
 
-      const playback = new AudioContext({ sampleRate: 16000 });
+      playback = new AudioContext({ sampleRate: 16000 });
       playbackCtxRef.current = playback;
       await playback.resume();
-      nextStartRef.current = playback.currentTime;
+      if (cancelled()) { abandon(); return; }
+      nextStartRef.current = 0;
+      jitterBufferRef.current = JITTER_BUFFER_START_S;
 
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const authQs = shareToken ? `share=${encodeURIComponent(shareToken)}&` : "";
@@ -258,6 +316,7 @@ export function WebcallPanel({
       wsRef.current = ws;
 
       ws.onmessage = (ev: MessageEvent) => {
+        if (wsRef.current !== ws) return;
         if (typeof ev.data !== "string") { enqueueAudio(ev.data as ArrayBuffer); return; }
         let msg: { type?: string; speaker?: "user" | "agent"; text?: string; message?: string };
         try { msg = JSON.parse(ev.data); } catch { return; }
@@ -304,23 +363,26 @@ export function WebcallPanel({
         }
       };
       ws.onerror = () => {
-        if (doneRef.current) return;
+        if (wsRef.current !== ws || doneRef.current) return;
         doneRef.current = true;
         setError("Connection error.");
         setState("error");
         teardown();
       };
       ws.onclose = () => {
-        if (doneRef.current) return;
+        if (wsRef.current !== ws || doneRef.current) return;
         teardown();
         setState("idle");
       };
     } catch (err) {
+      if (cancelled()) { abandon(); return; }
       const message = err instanceof Error ? err.message : "Failed to start the call.";
       doneRef.current = true;
       setError(message);
       setState("error");
       teardown();
+    } finally {
+      startingRef.current = false;
     }
   }, [agentId, enqueueAudio, clearPlayback, teardown, shareToken]);
 
