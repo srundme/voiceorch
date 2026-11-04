@@ -612,8 +612,10 @@ export function shouldClearVoiceForLanguage<T extends { id: string; language?: s
 /**
  * Order voices so the agent language's own voices come first, without hiding
  * the rest. Used by the voice picker so recommended voices surface at the top.
+ * Each group is A–Z by name: the API returns rows in database order, which
+ * shifted after a restore and made known voices hard to find.
  */
-export function orderVoicesByLanguage<T extends { language?: string | null }>(
+export function orderVoicesByLanguage<T extends { language?: string | null; name?: string | null }>(
   voices: readonly T[],
   agentLanguage: string | null | undefined,
 ): T[] {
@@ -622,7 +624,9 @@ export function orderVoicesByLanguage<T extends { language?: string | null }>(
   for (const v of voices) {
     (isVoiceCompatibleWithLanguage(v.language, agentLanguage) ? matching : rest).push(v);
   }
-  return [...matching, ...rest];
+  const byName = (a: T, b: T) =>
+    (a.name ?? "").trim().localeCompare((b.name ?? "").trim(), undefined, { sensitivity: "base" });
+  return [...matching.sort(byName), ...rest.sort(byName)];
 }
 
 /** True for any Tamil language variant (base language `ta`, e.g. ta-IN, ta-SG). */
