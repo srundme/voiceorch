@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { randomBytes } from "crypto";
 import { eq, desc, and, or, sql, gte, gt, lte, isNull, inArray } from "drizzle-orm";
-import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, vobizAccountsTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
+import { db, callsTable, callEventsTable, executionLogsTable, agentsTable, providersTable, usersTable, walletTransactionsTable, activityLogsTable, callTransfersTable, verifiedPhoneDestinationsTable, platformSettingsTable, phoneNumbersTable, callerProfilesTable, callerFactsTable, callerCallArchiveTable, callExecutionsTable, canonicalizeCallerKey, humanPhone, resolveCallerKey } from "@workspace/db";
 import { computeProRataDebitCents } from "../services/call-billing.js";
 import { resolveAgentBillingMode, resolveOwnTelephonyDiscount, resolveBillingRateCentsPerMin } from "../services/minute-rates.js";
 import { resolvePartnerBilling, creditPartnerSpreadOnCall } from "../services/partner-billing.js";
@@ -369,20 +369,10 @@ router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Pro
       const hasOwnCreds  = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
 
       if (hasOwnCreds) {
-        // ── Own Vobiz sub-account — KYC required for regulatory compliance ──
-        if (agent.userId) {
-          const [kycAccount] = await db
-            .select({ kycStatus: vobizAccountsTable.kycStatus })
-            .from(vobizAccountsTable)
-            .where(eq(vobizAccountsTable.userId, agent.userId));
-          if (!kycAccount || kycAccount.kycStatus !== "completed") {
-            res.status(403).json({
-              error: "Identity verification is required to use your own Vobiz number. Please complete KYC in the Verification section.",
-              code: "KYC_REQUIRED",
-            });
-            return;
-          }
-        }
+        // ── Client's own VoBiz account ──
+        // No SnapServe KYC gate: the client completed KYC with VoBiz directly
+        // to open that account and number. (SnapServe KYC is provisioned
+        // through our partner account and only applies to platform numbers.)
         effectiveFromNumber = cfg["fromNumber"]!;
         vobizCorrToken = randomBytes(8).toString("hex");
         {

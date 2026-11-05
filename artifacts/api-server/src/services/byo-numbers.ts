@@ -1,30 +1,41 @@
 // ── BYO (bring-your-own) telephony numbers ───────────────────────────────────
-// A user who saves a Plivo telephony provider key (with a `fromNumber` in its
-// extra config) gets that number surfaced as a FIRST-CLASS row in
-// `phone_numbers` (provider='plivo', free — no renewals). That makes the
-// normal Numbers-page assign/reassign flow work for it, and inbound calls are
-// resolved by To-number lookup on /api/webhooks/plivo/voice.
+// A user who saves a Plivo or VoBiz telephony provider key (with a `fromNumber`
+// in its extra config) gets that number surfaced as a FIRST-CLASS row in
+// `phone_numbers` (free — no renewals):
+//   - provider='plivo'     → inbound resolved by To-number on /webhooks/plivo/voice
+//   - provider='vobiz_byo' → inbound resolved by To-number on /webhooks/vobiz/voice
+// That makes the normal Numbers-page assign/reassign flow work for it.
 //
-// We also auto-configure the user's own Plivo account so inbound "just works":
-// find-or-create a "SnapServe Inbound" Plivo Application pointing at our
-// webhook, then attach the number to it. All Plivo-side steps are best-effort
-// (logged, never fatal): outbound + assignment must keep working even when the
-// Plivo API is unreachable or the token lacks permissions.
+// We also auto-configure the user's own carrier account so inbound "just
+// works": a SnapServe application pointing at our webhook, with the number
+// attached. All carrier-side steps are best-effort (logged, never fatal):
+// outbound + assignment must keep working even when the carrier API is
+// unreachable or the token lacks permissions.
+//
+// VoBiz BYO exists so clients can bring a number from a VoBiz account they
+// opened and KYC-verified themselves, independent of SnapServe's own VoBiz
+// partner account.
 
 import { db, phoneNumbersTable, providersTable } from "@workspace/db";
 import { and, eq, ne } from "drizzle-orm";
 import { decryptKey } from "../lib/crypto.js";
 import { getSelfBaseUrl } from "../lib/app-domain.js";
 import { logger } from "../lib/logger.js";
+import { configureVobizNumberWebhook } from "./vobiz-account.js";
 
 const PLIVO_BASE = "https://api.plivo.com/v1/Account";
 const APP_NAME = "SnapServe Inbound";
 
-interface PlivoCreds { authId: string; authToken: string; fromNumber: string }
+/** phone_numbers.provider for a number imported from a client's own VoBiz account. */
+export const BYO_VOBIZ_PROVIDER = "vobiz_byo";
 
-/** Extract usable Plivo creds from a provider row (null when incomplete). */
-function plivoCredsFromRow(p: { providerType: string; providerName: string; isActive: boolean; apiKey: string; extraConfig: string | null }): PlivoCreds | null {
-  if (p.providerType !== "telephony" || p.providerName.toLowerCase() !== "plivo" || !p.isActive) return null;
+interface PlivoCreds { authId: string; authToken: string; fromNumber: string }
+type CarrierCreds = PlivoCreds;
+type ProviderKeyRow = { providerType: string; providerName: string; isActive: boolean; apiKey: string; extraConfig: string | null };
+
+/** Extract usable Auth ID / token / fromNumber creds for `carrier` (null when incomplete). */
+function carrierCredsFromRow(p: ProviderKeyRow, carrier: "plivo" | "vobiz"): CarrierCreds | null {
+  if (p.providerType !== "telephony" || p.providerName.toLowerCase() !== carrier || !p.isActive) return null;
   let cfg: Record<string, string> = {};
   try { cfg = p.extraConfig ? JSON.parse(p.extraConfig) as Record<string, string> : {}; } catch { return null; }
   const authId = (cfg["authId"] ?? "").trim();
@@ -108,84 +119,143 @@ export async function configurePlivoInbound(creds: PlivoCreds): Promise<{ ok: bo
 }
 
 /**
- * Sync the user's BYO Plivo number(s) into phone_numbers.
- * - Upserts a free provider='plivo' row per active Plivo key fromNumber.
- * - Releases previously-imported plivo rows whose backing key is gone.
- * - Best-effort configures inbound on the user's Plivo account.
- * Never throws — provider save/delete must not fail because of this.
+ * Link the number on the USER'S own VoBiz account to a "SnapServe" application
+ * pointing at our inbound webhook. Their account's default app is left alone
+ * (makeDefault: false), so other numbers they route elsewhere are unaffected.
  */
-export async function syncByoPlivoNumbers(userId: string, opts?: { configureAll?: boolean }): Promise<void> {
+export async function configureVobizInbound(creds: CarrierCreds): Promise<{ ok: boolean; detail: string }> {
   try {
-    const rows = await db.select().from(providersTable).where(eq(providersTable.userId, userId));
-    const credsList = rows.map(plivoCredsFromRow).filter((c): c is PlivoCreds => !!c);
-    const wanted = new Map<string, PlivoCreds>();
-    for (const c of credsList) {
-      const num = normalizeE164ish(c.fromNumber);
-      if (num) wanted.set(num, c);
-    }
+    const r = await configureVobizNumberWebhook(creds.authId, creds.authToken, creds.fromNumber, getSelfBaseUrl(), { makeDefault: false });
+    return { ok: r.verified, detail: r.detail };
+  } catch (err) {
+    return { ok: false, detail: `VoBiz API unreachable: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
 
-    // Release imported rows no longer backed by an active key.
-    const existing = await db
-      .select()
-      .from(phoneNumbersTable)
-      .where(and(
-        eq(phoneNumbersTable.userId, userId),
-        eq(phoneNumbersTable.provider, "plivo"),
-        ne(phoneNumbersTable.status, "released"),
-      ));
-    for (const row of existing) {
-      if (!wanted.has(row.number)) {
-        await db.update(phoneNumbersTable)
-          .set({ status: "released", releasedAt: new Date(), agentId: null })
-          .where(eq(phoneNumbersTable.id, row.id));
-        logger.info({ userId, number: row.number }, "BYO Plivo number released (key removed/deactivated)");
-      }
-    }
+type CarrierSpec = {
+  /** providers.provider_name of the key. */
+  carrier: "plivo" | "vobiz";
+  /** phone_numbers.provider for the imported row. */
+  rowProvider: string;
+  label: string;
+  configureInbound: (creds: CarrierCreds) => Promise<{ ok: boolean; detail: string }>;
+};
 
-    for (const [number, creds] of wanted) {
-      const [any] = await db.select().from(phoneNumbersTable).where(eq(phoneNumbersTable.number, number));
-      if (any && any.userId !== userId) {
-        // Number already registered by another account — never steal it.
-        logger.warn({ userId, number }, "BYO Plivo number already registered to another account — skipped");
+const CARRIERS: CarrierSpec[] = [
+  { carrier: "plivo", rowProvider: "plivo", label: "Plivo", configureInbound: configurePlivoInbound },
+  { carrier: "vobiz", rowProvider: BYO_VOBIZ_PROVIDER, label: "VoBiz", configureInbound: configureVobizInbound },
+];
+
+/**
+ * Sync one carrier's BYO number(s) into phone_numbers.
+ * - Upserts a free row per active key fromNumber.
+ * - Releases previously-imported rows whose backing key is gone.
+ * - Best-effort configures inbound on the user's carrier account.
+ */
+async function syncCarrierNumbers(
+  userId: string,
+  keyRows: ProviderKeyRow[],
+  spec: CarrierSpec,
+  opts?: { configureAll?: boolean },
+): Promise<void> {
+  const wanted = new Map<string, CarrierCreds>();
+  for (const row of keyRows) {
+    const c = carrierCredsFromRow(row, spec.carrier);
+    const num = c ? normalizeE164ish(c.fromNumber) : "";
+    if (c && num) wanted.set(num, c);
+  }
+
+  // Release imported rows no longer backed by an active key.
+  const existing = await db
+    .select()
+    .from(phoneNumbersTable)
+    .where(and(
+      eq(phoneNumbersTable.userId, userId),
+      eq(phoneNumbersTable.provider, spec.rowProvider),
+      ne(phoneNumbersTable.status, "released"),
+    ));
+  for (const row of existing) {
+    if (!wanted.has(row.number)) {
+      await db.update(phoneNumbersTable)
+        .set({ status: "released", releasedAt: new Date(), agentId: null })
+        .where(eq(phoneNumbersTable.id, row.id));
+      logger.info({ userId, number: row.number }, `BYO ${spec.label} number released (key removed/deactivated)`);
+    }
+  }
+
+  for (const [number, creds] of wanted) {
+    const [any] = await db.select().from(phoneNumbersTable).where(eq(phoneNumbersTable.number, number));
+    if (any && any.userId !== userId) {
+      // Number already registered by another account — never steal it.
+      logger.warn({ userId, number }, `BYO ${spec.label} number already registered to another account — skipped`);
+      continue;
+    }
+    let changed = false;
+    if (any) {
+      if (any.provider !== spec.rowProvider) {
+        // Same user already OWNS this number as a platform (paid) DID — never
+        // convert it to a free BYO row (that would silently stop renewals).
+        logger.warn({ userId, number, provider: any.provider }, `BYO ${spec.label} fromNumber matches an existing platform number — left untouched`);
         continue;
       }
-      let changed = false;
-      if (any) {
-        if (any.provider !== "plivo") {
-          // Same user already OWNS this number as a platform (paid) DID — never
-          // convert it to a free BYO row (that would silently stop renewals).
-          logger.warn({ userId, number, provider: any.provider }, "BYO Plivo fromNumber matches an existing platform number — left untouched");
-          continue;
-        }
-        if (any.status === "released") {
-          await db.update(phoneNumbersTable)
-            .set({ status: "active", releasedAt: null, monthlyRateCents: 0, renewalRateCents: 0, nextRenewalAt: null })
-            .where(eq(phoneNumbersTable.id, any.id));
-          changed = true;
-        }
-      } else {
-        await db.insert(phoneNumbersTable).values({
-          userId,
-          number,
-          countryCode: guessCountry(number),
-          numberType: "local",
-          service: "voice",
-          provider: "plivo",
-          status: "active",
-          monthlyRateCents: 0,
-          renewalRateCents: 0,
-        });
+      if (any.status === "released") {
+        await db.update(phoneNumbersTable)
+          .set({ status: "active", releasedAt: null, monthlyRateCents: 0, renewalRateCents: 0, nextRenewalAt: null })
+          .where(eq(phoneNumbersTable.id, any.id));
         changed = true;
-        logger.info({ userId, number }, "BYO Plivo number imported as phone_numbers row");
       }
-      // Plivo-side config is comparatively slow — only touch their account when
-      // something changed, or when explicitly asked (assign flow / key save).
-      if (changed || opts?.configureAll) {
-        const cfg = await configurePlivoInbound(creds);
-        logger.info({ userId, number, ...cfg }, "BYO Plivo inbound auto-config");
-      }
+    } else {
+      await db.insert(phoneNumbersTable).values({
+        userId,
+        number,
+        countryCode: guessCountry(number),
+        numberType: "local",
+        service: "voice",
+        provider: spec.rowProvider,
+        status: "active",
+        monthlyRateCents: 0,
+        renewalRateCents: 0,
+      });
+      changed = true;
+      logger.info({ userId, number }, `BYO ${spec.label} number imported as phone_numbers row`);
     }
-  } catch (err) {
-    logger.error({ userId, err: err instanceof Error ? err.message : String(err) }, "syncByoPlivoNumbers failed");
+    // Carrier-side config is comparatively slow — only touch their account when
+    // something changed, or when explicitly asked (assign flow / key save).
+    if (changed || opts?.configureAll) {
+      const cfg = await spec.configureInbound(creds);
+      logger.info({ userId, number, ...cfg }, `BYO ${spec.label} inbound auto-config`);
+    }
   }
+}
+
+/**
+ * Sync the user's BYO Plivo and VoBiz numbers into phone_numbers.
+ * Never throws — provider save/delete must not fail because of this.
+ */
+export async function syncByoNumbers(userId: string, opts?: { configureAll?: boolean }): Promise<void> {
+  let keyRows: ProviderKeyRow[];
+  try {
+    keyRows = await db.select().from(providersTable).where(eq(providersTable.userId, userId));
+  } catch (err) {
+    logger.error({ userId, err: err instanceof Error ? err.message : String(err) }, "syncByoNumbers: provider load failed");
+    return;
+  }
+  for (const spec of CARRIERS) {
+    try {
+      await syncCarrierNumbers(userId, keyRows, spec, opts);
+    } catch (err) {
+      logger.error({ userId, carrier: spec.carrier, err: err instanceof Error ? err.message : String(err) }, "syncByoNumbers failed");
+    }
+  }
+}
+
+/** Configure inbound for one imported VoBiz BYO number (assign flow / repair). */
+export async function configureByoVobizNumber(userId: string, number: string): Promise<{ ok: boolean; detail: string }> {
+  const keyRows = await db.select().from(providersTable).where(eq(providersTable.userId, userId));
+  const want = normalizeE164ish(number);
+  for (const row of keyRows) {
+    const c = carrierCredsFromRow(row, "vobiz");
+    if (c && normalizeE164ish(c.fromNumber) === want) return configureVobizInbound(c);
+  }
+  return { ok: false, detail: "No active VoBiz key on this account owns this number" };
 }

@@ -1137,9 +1137,9 @@ export default function PhoneNumbersPage({
   // "fromNumber" from each telephony provider key so users can see it here.
   const { data: providerKeys } = useListProviders({ query: { queryKey: getListProvidersQueryKey() } });
   const importedNumbers = (providerKeys ?? [])
-    // Plivo BYO numbers are now imported as REAL rows in the numbers list
-    // (assignable to agents like any other number) — don't double-show them.
-    .filter((p) => p.providerType === "telephony" && p.isActive && p.providerName.toLowerCase() !== "plivo")
+    // Plivo and VoBiz BYO numbers are imported as REAL rows in the numbers
+    // list (assignable to agents like any other number) — don't double-show them.
+    .filter((p) => p.providerType === "telephony" && p.isActive && !["plivo", "vobiz"].includes(p.providerName.toLowerCase()))
     .map((p) => {
       let fromNumber = "";
       try { fromNumber = (JSON.parse(p.extraConfig ?? "{}") as Record<string, string>)["fromNumber"] ?? ""; } catch { /* ignore */ }
@@ -1307,6 +1307,8 @@ export default function PhoneNumbersPage({
 
                 {(n as { provider?: string }).provider === "plivo" ? (
                   <Badge variant="secondary" className="text-[10px] shrink-0">Your Plivo number · Free</Badge>
+                ) : (n as { provider?: string }).provider === "vobiz_byo" ? (
+                  <Badge variant="secondary" className="text-[10px] shrink-0">Your Vobiz number · Free</Badge>
                 ) : (
                   <>
                     <Badge variant="outline" className="text-[10px] capitalize shrink-0">
@@ -1368,7 +1370,7 @@ export default function PhoneNumbersPage({
                         >
                           <Link2 className="h-3 w-3" /> {n.agentId ? "Reassign" : "Assign"}
                         </Button>
-                        {ownerExtras && (n as { provider?: string }).provider !== "plivo" && (
+                        {ownerExtras && !["plivo", "vobiz_byo"].includes((n as { provider?: string }).provider ?? "") && (
                           <Button
                             variant="ghost"
                             size="sm"
