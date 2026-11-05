@@ -871,14 +871,14 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
       }
 
       let [pn] = await db
-        .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
+        .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules, provider: phoneNumbersTable.provider })
         .from(phoneNumbersTable)
         .where(inArray(phoneNumbersTable.number, [...candidates]));
 
       if (!pn?.agentId && toRaw.length >= 10) {
         const last10 = toRaw.slice(-10);
         const [fallbackPn] = await db
-          .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules })
+          .select({ agentId: phoneNumbersTable.agentId, routingRules: phoneNumbersTable.routingRules, provider: phoneNumbersTable.provider })
           .from(phoneNumbersTable)
           .where(and(
             sql`RIGHT(REGEXP_REPLACE(${phoneNumbersTable.number}, '[^0-9]', '', 'g'), 10) = ${last10}`,
@@ -889,7 +889,9 @@ router.post("/webhooks/vobiz/voice", async (req, res): Promise<void> => {
 
       if (pn?.agentId) {
         agentId = pn.agentId;
-        platformTelephony = true;
+        // Only platform DIDs are platform telephony; a client's own VoBiz
+        // number (provider 'vobiz_byo') rides on their account and keys.
+        platformTelephony = pn.provider === "vobiz";
         routingRules = (pn.routingRules as RoutingRule[] | null) ?? null;
       }
     }

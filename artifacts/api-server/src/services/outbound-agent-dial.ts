@@ -190,15 +190,9 @@ export async function dialOutboundAgent(opts: {
       const hasOwnCreds = !!(providerRow && cfg["authId"] && cfg["fromNumber"]);
 
       if (hasOwnCreds) {
-        if (agent.userId) {
-          const [kycAccount] = await db
-            .select({ kycStatus: vobizAccountsTable.kycStatus })
-            .from(vobizAccountsTable)
-            .where(eq(vobizAccountsTable.userId, agent.userId));
-          if (!kycAccount || kycAccount.kycStatus !== "completed") {
-            throw new OutboundDialError("KYC required for own Vobiz number", "KYC_REQUIRED", 403);
-          }
-        }
+        // Client's own VoBiz account: no SnapServe KYC gate. They completed KYC
+        // with VoBiz directly to open it; SnapServe KYC is provisioned through
+        // our partner account and only applies to platform numbers.
         effectiveFromNumber = agentOutboundNumber || cfg["fromNumber"]!;
         await beforeDial(effectiveFromNumber);
         vobizCorrToken = randomBytes(8).toString("hex");

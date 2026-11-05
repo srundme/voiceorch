@@ -50,6 +50,8 @@ interface ProviderDef {
   docsUrl: string;
   docsLabel: string;
   extraFields?: ExtraField[];
+  /** Short "before you start" steps shown above the credential fields. */
+  setupSteps?: string[];
 }
 
 const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
@@ -78,7 +80,12 @@ const SUPPORTED_PROVIDERS: Record<string, ProviderDef[]> = {
   telephony: [
     { label: "Twilio", value: "twilio", apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Twilio Auth Token…", docsUrl: "https://console.twilio.com", docsLabel: "console.twilio.com", extraFields: [{ key: "accountSid", label: "Account SID", placeholder: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", hint: "Found on your Twilio console home page" }, { key: "fromNumber", label: "Twilio Phone Number", placeholder: "+1234567890", hint: "The phone number you bought on Twilio (E.164 format)" }] },
     { label: "Plivo", value: "plivo", apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Plivo Auth Token…", docsUrl: "https://console.plivo.com", docsLabel: "console.plivo.com", extraFields: [{ key: "authId", label: "Auth ID", placeholder: "MAXXXXXXXXXXXXXXXXXX", hint: "Found on your Plivo console dashboard" }, { key: "fromNumber", label: "Plivo Phone Number", placeholder: "+1234567890", hint: "The phone number you bought on Plivo (E.164 format)" }] },
-    { label: "Vobiz", value: "vobiz", apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Vobiz Auth Token…", docsUrl: "https://docs.vobiz.ai", docsLabel: "docs.vobiz.ai", extraFields: [{ key: "authId", label: "Auth ID", placeholder: "MA_XXXXXXXX", hint: "Found in Vobiz Console → API Credentials" }, { key: "fromNumber", label: "Vobiz Phone Number", placeholder: "+1234567890", hint: "The DID number you have on Vobiz (E.164 format)" }] },
+    { label: "Vobiz", value: "vobiz", apiKeyLabel: "Auth Token", apiKeyPlaceholder: "Paste your Vobiz Auth Token…", docsUrl: "https://docs.vobiz.ai", docsLabel: "docs.vobiz.ai", setupSteps: [
+      "Open your own account at vobiz.ai and finish KYC there.",
+      "Buy a phone number in your Vobiz console.",
+      "Paste your Auth ID, Auth Token and that number below. We check them with Vobiz before saving.",
+      "Your number then shows on the Numbers page. Assign it to an agent: calls in and out go through your Vobiz account, and incoming calls are connected for you.",
+    ], extraFields: [{ key: "authId", label: "Auth ID", placeholder: "MA_XXXXXXXX", hint: "Found in Vobiz Console → API Credentials" }, { key: "fromNumber", label: "Vobiz Phone Number", placeholder: "+919876543210", hint: "A number you bought on your Vobiz account, with country code" }] },
   ],
 };
 
@@ -359,6 +366,12 @@ export default function ProvidersList({
               {selectedDef && (
                 <div className="space-y-3.5 pt-1 border-t border-border/60">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/50 pt-3.5">2 · Enter credentials</p>
+
+                  {selectedDef.setupSteps && selectedDef.setupSteps.length > 0 && (
+                    <ol className="list-decimal space-y-1 rounded-md border border-border/60 bg-muted/30 py-2.5 pl-7 pr-3 text-[11.5px] text-muted-foreground">
+                      {selectedDef.setupSteps.map((step) => <li key={step}>{step}</li>)}
+                    </ol>
+                  )}
 
                   {selectedDef.extraFields && selectedDef.extraFields.length > 0 && (
                     <div className="space-y-3">
