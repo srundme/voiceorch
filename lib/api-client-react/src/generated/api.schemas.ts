@@ -1897,7 +1897,7 @@ export const PhoneNumberNumberType = {
 } as const;
 
 /**
- * Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO).
+ * Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO); 'vobiz_byo' = user's own VoBiz number imported from their telephony key (free, BYO).
  */
 export type PhoneNumberProvider = typeof PhoneNumberProvider[keyof typeof PhoneNumberProvider];
 
@@ -1905,6 +1905,7 @@ export type PhoneNumberProvider = typeof PhoneNumberProvider[keyof typeof PhoneN
 export const PhoneNumberProvider = {
   vobiz: 'vobiz',
   plivo: 'plivo',
+  vobiz_byo: 'vobiz_byo',
 } as const;
 
 export type PhoneNumberStatus = typeof PhoneNumberStatus[keyof typeof PhoneNumberStatus];
@@ -1938,7 +1939,7 @@ export interface PhoneNumber {
   numberType: PhoneNumberNumberType;
   /** @nullable */
   vobizNumberId?: string | null;
-  /** Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO). */
+  /** Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO); 'vobiz_byo' = user's own VoBiz number imported from their telephony key (free, BYO). */
   provider?: PhoneNumberProvider;
   /** @nullable */
   agentId?: number | null;
