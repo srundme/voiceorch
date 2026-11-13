@@ -9027,8 +9027,8 @@ components:
           type: ["string", "null"]
         provider:
           type: string
-          enum: [vobiz, plivo]
-          description: Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO).
+          enum: [vobiz, plivo, vobiz_byo]
+          description: Where the number lives — 'vobiz' = platform-rented DID; 'plivo' = user's own Plivo number imported from their telephony key (free, BYO); 'vobiz_byo' = user's own VoBiz number imported from their telephony key (free, BYO).
         agentId:
           type: ["integer", "null"]
         agentName:
