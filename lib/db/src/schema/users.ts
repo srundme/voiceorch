@@ -32,6 +32,8 @@ export const usersTable = pgTable("users", {
   unlimitedManagedTrial: boolean("unlimited_managed_trial").notNull().default(false),
   /** Admin grant: may create, edit and test-call agents. Off for everyone else (view-only). */
   agentEditAllowed: boolean("agent_edit_allowed").notNull().default(false),
+  /** Admin-set message shown to this account as a dashboard banner (null = none). */
+  accountNotice: text("account_notice"),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
   // Partner (reseller) linkage — set when this user is a client onboarded by a partner.

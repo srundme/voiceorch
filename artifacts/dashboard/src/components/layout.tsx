@@ -36,7 +36,7 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext, usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit, useAgentEditRestricted, AGENT_EDIT_RESTRICTED_MESSAGE, type PartnerPermissions } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit, useAgentEditRestricted, useAccountNotice, AGENT_EDIT_RESTRICTED_MESSAGE, type PartnerPermissions } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -1018,6 +1018,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [newAgentOpen, setNewAgentOpen] = useState(false);
   const { data: partnerCtx } = usePartnerContext();
   const agentEditRestricted = useAgentEditRestricted();
+  const accountNotice = useAccountNotice();
   const queryClient = useQueryClient();
 
   // Partner acting-as-client mode (sessionStorage-backed; survives reloads
@@ -1128,6 +1129,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Main */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[calc(50px+env(safe-area-inset-top,0px))] md:pt-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {agentEditRestricted && <AgentEditRestrictedBanner />}
+        {accountNotice && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-sky-500/10 border-b border-sky-500/30">
+            <span className="text-[12.5px] font-medium text-sky-900 dark:text-sky-200">{accountNotice}</span>
+          </div>
+        )}
         {/* Partner acting-as-client banner */}
         {actingAs && (
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">

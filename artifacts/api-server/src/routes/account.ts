@@ -59,6 +59,7 @@ router.get("/account", requireAuth, clientContext, async (req, res): Promise<voi
     ...toAccountInfo(user),
     concurrentLimit: effectiveLimit,
     agentEditAllowed,
+    accountNotice: user.accountNotice?.trim() || null,
   });
 });
 

@@ -391,6 +391,30 @@ router.patch("/admin/users/:clerkId/test-flag", async (req, res): Promise<void> 
   }
 });
 
+// Set or clear the banner message shown to one account (empty clears it).
+router.patch("/admin/users/:clerkId/notice", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const { notice } = req.body as { notice: string | null };
+    if (notice !== null && typeof notice !== "string") {
+      res.status(400).json({ error: "notice must be a string or null" });
+      return;
+    }
+    const clean = (notice ?? "").trim().slice(0, 500) || null;
+    const [updated] = await db
+      .update(usersTable)
+      .set({ accountNotice: clean })
+      .where(eq(usersTable.clerkId, clerkId!))
+      .returning({ accountNotice: usersTable.accountNotice });
+    if (!updated) { res.status(404).json({ error: "User not found" }); return; }
+    logger.info({ clerkId, hasNotice: !!clean }, "Admin set account notice");
+    res.json({ accountNotice: updated.accountNotice });
+  } catch (err) {
+    req.log.error({ err }, "admin/users/:clerkId/notice failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Grant / revoke the ability to create, edit and test-call agents.
 router.patch("/admin/users/:clerkId/agent-edit", async (req, res): Promise<void> => {
   try {
