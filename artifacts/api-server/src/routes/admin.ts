@@ -209,6 +209,7 @@ router.get("/admin/users", async (req, res): Promise<void> => {
       onboardingCompleted: u.onboardingCompleted,
       onboardingData: u.onboardingData,
       isTest: u.isTest,
+      agentEditAllowed: u.agentEditAllowed,
       status: u.status,
       callCount: callCountMap.get(u.clerkId) ?? 0,
       agentCount: agentCountMap.get(u.clerkId) ?? 0,
@@ -386,6 +387,31 @@ router.patch("/admin/users/:clerkId/test-flag", async (req, res): Promise<void> 
     res.json({ isTest: updated?.isTest });
   } catch (err) {
     req.log.error({ err }, "admin/users/:clerkId/test-flag failed");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Grant / revoke the ability to create, edit and test-call agents.
+router.patch("/admin/users/:clerkId/agent-edit", async (req, res): Promise<void> => {
+  try {
+    const { clerkId } = req.params;
+    const { allowed } = req.body as { allowed: boolean };
+    if (typeof allowed !== "boolean") {
+      res.status(400).json({ error: "allowed must be a boolean" });
+      return;
+    }
+    const [updated] = await db
+      .update(usersTable)
+      .set({ agentEditAllowed: allowed })
+      .where(eq(usersTable.clerkId, clerkId!))
+      .returning({ agentEditAllowed: usersTable.agentEditAllowed });
+    if (!updated) { res.status(404).json({ error: "User not found" }); return; }
+    const { invalidateAgentEditAccess } = await import("../lib/agent-edit-access.js");
+    invalidateAgentEditAccess(clerkId!);
+    logger.info({ clerkId, allowed }, "Admin set agent edit access");
+    res.json({ agentEditAllowed: updated.agentEditAllowed });
+  } catch (err) {
+    req.log.error({ err }, "admin/users/:clerkId/agent-edit failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

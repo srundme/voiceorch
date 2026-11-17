@@ -348,6 +348,25 @@ server.on("upgrade", (request, socket, head) => { void (async () => {
         return;
       }
       try {
+        // Only accounts with agent edit access may Live-Test (see agent-edit-access.ts).
+        const { isAgentEditAllowed, AGENT_EDIT_RESTRICTED_MESSAGE } = await import("./lib/agent-edit-access.js");
+        const testers = payload.sub === effectiveUserId ? [effectiveUserId] : [effectiveUserId, payload.sub];
+        for (const id of testers) {
+          if (!(await isAgentEditAllowed(id))) {
+            logger.warn({ agentId, sub: payload.sub }, "Webcall upgrade rejected — agent edit access restricted");
+            const body = JSON.stringify({ error: AGENT_EDIT_RESTRICTED_MESSAGE, code: "AGENT_EDIT_RESTRICTED" });
+            socket.write(`HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+            socket.destroy();
+            return;
+          }
+        }
+      } catch (err) {
+        logger.error({ err, agentId }, "Webcall upgrade — agent edit access check failed");
+        socket.write("HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+      try {
         // Gate on the BILLED account's wallet (the agent owner when a partner
         // is testing a managed client's agent).
         const walletRows = await db

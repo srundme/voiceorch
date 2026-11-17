@@ -21,6 +21,7 @@ import {
   useSendEmailToUser,
   usePlatformEmails,
   useSetUserUnlimitedTrial,
+  useSetUserAgentEdit,
   useUser360,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
@@ -67,6 +68,7 @@ export default function UserDetail() {
   // Mutations
   const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
   const setUnlimitedTrial = useSetUserUnlimitedTrial(clerkId || "");
+  const setAgentEdit = useSetUserAgentEdit(clerkId || "");
   const setStatus = useSetUserStatus(clerkId || "");
   const unlockPortalLogin = useUnlockPortalLogin(clerkId || "");
   const editProfile = useEditUserProfile(clerkId || "");
@@ -615,6 +617,38 @@ export default function UserDetail() {
                 </div>
                 <Badge variant={user.unlimitedManagedTrial ? "default" : "outline"} className={user.unlimitedManagedTrial ? "bg-emerald-600" : ""}>
                   {user.unlimitedManagedTrial ? "Enabled" : "Capped"}
+                </Badge>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Agent editing
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Allow this account to create, edit and test-call agents. When off, agents are view-only.
+                  </p>
+                  <Switch
+                    checked={!!(user as { agentEditAllowed?: boolean }).agentEditAllowed}
+                    disabled={setAgentEdit.isPending}
+                    onCheckedChange={(checked) => {
+                      setAgentEdit.mutate({ allowed: checked }, {
+                        onSuccess: () => toast({
+                          title: checked ? "Agent editing ON" : "Agent editing OFF",
+                          description: checked
+                            ? "This account can create, edit and test agents."
+                            : "This account can only view its agents.",
+                        }),
+                        onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                      });
+                    }}
+                  />
+                </div>
+                <Badge variant={(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "default" : "outline"} className={(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "bg-emerald-600" : ""}>
+                  {(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "Allowed" : "View only"}
                 </Badge>
               </CardContent>
             </Card>

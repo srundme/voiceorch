@@ -8075,7 +8075,7 @@ export function AgentEditorPanel({ agentId, onOpenAgents, embedded }: { agentId:
         else {
           toast({
             title: "Read-Only Mode",
-            description: "Your account is set to read-only mode by your partner. Changes cannot be saved.",
+            description: "Your account is in read-only mode. Changes cannot be saved.",
             variant: "destructive",
           });
         }

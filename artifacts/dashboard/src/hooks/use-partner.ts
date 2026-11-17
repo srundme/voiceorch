@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { loadActingAs } from "@/lib/acting-as";
-import { useListAgents } from "@workspace/api-client-react";
+import { useGetAccount, useListAgents } from "@workspace/api-client-react";
 
 export interface NavVisibility {
   agents?: boolean;
@@ -124,8 +124,19 @@ export function usePartnerManagedWorkspace() {
  * True when the active user is a managed client whose partner set permissions mode to "read_only".
  * When a partner is acting-as this client, actingAs is non-null so this returns false (allowing partner edits).
  */
+export const AGENT_EDIT_RESTRICTED_MESSAGE =
+  "Due to a technical issue, creating, editing and test-calling agents is temporarily restricted. We are working on it.";
+
+/** True when an admin has not granted this account agent editing (view-only agents). */
+export function useAgentEditRestricted(): boolean {
+  const { data: account } = useGetAccount();
+  return (account as { agentEditAllowed?: boolean } | undefined)?.agentEditAllowed === false;
+}
+
 export function useIsPartnerReadOnly(): boolean {
   const { data: partnerCtx } = usePartnerContext();
+  const restricted = useAgentEditRestricted();
+  if (restricted) return true;
   const actingAs = loadActingAs();
   if (actingAs) return false;
   return partnerCtx?.isManagedClient === true && partnerCtx?.partnerPermissions?.mode === "read_only";

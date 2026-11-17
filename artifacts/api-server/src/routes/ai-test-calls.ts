@@ -17,6 +17,7 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import { generatePersonaDrafts, PersonaGenerationError } from "../services/ai-test-calls/personas.js";
 import { BriefUnavailableError } from "../services/ai-test-calls/brief.js";
@@ -149,7 +150,7 @@ router.get("/agents/:id/test-calls/setup", requireAuth, clientContext, async (re
 
 /* ── Test cases ───────────────────────────────────────────────────────────── */
 
-router.post("/agents/:id/test-cases/generate", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/:id/test-cases/generate", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const agent = await loadTargetAgent(req, res, { write: true });
   if (!agent) return;
   const count = Math.min(MAX_TEST_CASES_PER_GENERATE, Math.max(1, Number(req.body?.count) || 5));
@@ -189,7 +190,7 @@ router.get("/agents/:id/test-cases", requireAuth, clientContext, async (req, res
   res.json({ testCases: rows });
 });
 
-router.post("/agents/:id/test-cases", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/:id/test-cases", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const agent = await loadTargetAgent(req, res, { write: true });
   if (!agent) return;
   const parsed = z.object({ testCases: z.array(caseInput).min(1).max(20) }).safeParse(req.body);
@@ -252,7 +253,7 @@ router.delete("/test-cases/:caseId", requireAuth, clientContext, async (req, res
 
 /* ── Runs ─────────────────────────────────────────────────────────────────── */
 
-router.post("/agents/:id/test-runs", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/:id/test-runs", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const agent = await loadTargetAgent(req, res, { write: true });
   if (!agent) return;
   const parsed = z.object({

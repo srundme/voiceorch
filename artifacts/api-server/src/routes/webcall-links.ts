@@ -2,6 +2,7 @@ import { Router } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { db, webcallLinksTable, agentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import {
   getWebcallLinkByToken,
   isWebcallLinkUsable,
@@ -184,7 +185,7 @@ router.get("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res)
  * POST — create (or rotate) the per-agent website embed token.
  * Body: { regenerate?: boolean }
  */
-router.post("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res): Promise<void> => {
+router.post("/agents/:agentId/webcall-links/embed", requireAuth, requireAgentEditAccess, async (req, res): Promise<void> => {
   const agentId = parseInt(String(req.params.agentId), 10);
   const clerkId = (req as any).clerkUserId as string;
   if (!Number.isFinite(agentId)) {
@@ -230,7 +231,7 @@ router.post("/agents/:agentId/webcall-links/embed", requireAuth, async (req, res
   }
 });
 
-router.post("/agents/:agentId/webcall-links", requireAuth, async (req, res): Promise<void> => {
+router.post("/agents/:agentId/webcall-links", requireAuth, requireAgentEditAccess, async (req, res): Promise<void> => {
   const agentId = parseInt(String(req.params.agentId), 10);
   const clerkId = (req as any).clerkUserId as string;
   if (!Number.isFinite(agentId)) {
@@ -271,7 +272,7 @@ router.post("/agents/:agentId/webcall-links", requireAuth, async (req, res): Pro
   }
 });
 
-router.patch("/webcall-links/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/webcall-links/:id", requireAuth, requireAgentEditAccess, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const clerkId = (req as any).clerkUserId as string;
   if (!Number.isFinite(id)) {

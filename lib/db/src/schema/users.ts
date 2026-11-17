@@ -30,6 +30,8 @@ export const usersTable = pgTable("users", {
   isTest: boolean("is_test").notNull().default(false),
   /** Admin grant: skip managed-outbound daily trial cap for this account. */
   unlimitedManagedTrial: boolean("unlimited_managed_trial").notNull().default(false),
+  /** Admin grant: may create, edit and test-call agents. Off for everyone else (view-only). */
+  agentEditAllowed: boolean("agent_edit_allowed").notNull().default(false),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspendedReason: text("suspended_reason"),
   // Partner (reseller) linkage — set when this user is a client onboarded by a partner.

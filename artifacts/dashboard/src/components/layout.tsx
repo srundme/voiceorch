@@ -36,7 +36,7 @@ import {
   WalletIcon,
   SettingsIcon,
 } from "@workspace/brand-icons";
-import { usePartnerContext, usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit, type PartnerPermissions } from "@/hooks/use-partner";
+import { usePartnerContext, usePartnerManagedWorkspace, useIsPartnerReadOnly, useAgentLimit, useAgentEditRestricted, AGENT_EDIT_RESTRICTED_MESSAGE, type PartnerPermissions } from "@/hooks/use-partner";
 import { PlanLimitModal } from "@/components/plan-limit-modal";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -847,11 +847,21 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
   );
 }
 
+/* ─── Agent edit restriction banner ─────────────────────────────────────── */
+function AgentEditRestrictedBanner() {
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
+      <span className="text-[12.5px] text-amber-800 dark:text-amber-300">{AGENT_EDIT_RESTRICTED_MESSAGE}</span>
+    </div>
+  );
+}
+
 /* ─── New-agent choice modal ─────────────────────────────────────────────── */
 function NewAgentModal({ open, onClose, onLimitReached }: { open: boolean; onClose: () => void; onLimitReached?: () => void }) {
   const [, navigate] = useLocation();
   const { isManagedWorkspace } = usePartnerManagedWorkspace();
   const isReadOnly = useIsPartnerReadOnly();
+  const agentEditRestricted = useAgentEditRestricted();
   const { isLimitReached } = useAgentLimit();
 
   const goManual = () => {
@@ -877,10 +887,12 @@ function NewAgentModal({ open, onClose, onLimitReached }: { open: boolean; onClo
       <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-base">Read-Only Mode</DialogTitle>
+            <DialogTitle className="text-base">{agentEditRestricted ? "Temporarily restricted" : "Read-Only Mode"}</DialogTitle>
           </DialogHeader>
           <p className="text-[13px] text-muted-foreground -mt-1">
-            Your managing partner has set your account to read-only mode. Creating new agents is disabled.
+            {agentEditRestricted
+              ? AGENT_EDIT_RESTRICTED_MESSAGE
+              : "Your managing partner has set your account to read-only mode. Creating new agents is disabled."}
           </p>
           <Button variant="outline" className="w-full mt-2" onClick={onClose}>
             Close
@@ -1002,6 +1014,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [newAgentOpen, setNewAgentOpen] = useState(false);
   const { data: partnerCtx } = usePartnerContext();
+  const agentEditRestricted = useAgentEditRestricted();
   const queryClient = useQueryClient();
 
   // Partner acting-as-client mode (sessionStorage-backed; survives reloads
@@ -1111,6 +1124,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden bg-background pt-[calc(50px+env(safe-area-inset-top,0px))] md:pt-0 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+        {agentEditRestricted && <AgentEditRestrictedBanner />}
         {/* Partner acting-as-client banner */}
         {actingAs && (
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">

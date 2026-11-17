@@ -1,3 +1,4 @@
+import { AGENT_EDIT_RESTRICTED_MESSAGE, isAgentEditAllowed } from "../lib/agent-edit-access.js";
 import { randomUUID } from "node:crypto";
 import { callEngineInsertDefaults, db, agentsTable, campaignsTable, phoneNumbersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
@@ -79,6 +80,9 @@ export async function runAssistantJob(
   jarvisVoice: JarvisVoice,
   ctx: { lastAgentId?: number } = {},
 ): Promise<JobResult> {
+  if ((job.type === "create_agent" || job.type === "set_agent_status") && !(await isAgentEditAllowed(clerkUserId))) {
+    return { success: false, message: AGENT_EDIT_RESTRICTED_MESSAGE };
+  }
   if (job.type === "navigate") {
     if (!job.href || !job.href.startsWith("/app/")) {
       return { success: false, message: "That page path is not allowed." };

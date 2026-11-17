@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import {
   db, agentsTable, schedulingCalendarsTable,
   availabilitySchedulesTable, eventTypesTable,
@@ -578,7 +579,7 @@ async function callVibeLlm(_key: string, messages: VibeChatMessage[], system = V
 
 /* ── POST /agents/vibe-chat ──────────────────────────────────────────────── */
 
-router.post("/agents/vibe-chat", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/vibe-chat", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const {
     messages,
