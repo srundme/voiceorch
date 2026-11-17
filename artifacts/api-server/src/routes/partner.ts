@@ -52,6 +52,7 @@ import { invalidateUserStatusCache } from "../middlewares/userStatusCache.js";
 import { maskEmail } from "../services/referral-reward.js";
 import { and, desc, eq, gte, inArray, isNull, ne, sql, count } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import { resolveWorkspaceScope } from "../services/workspace-scope.js";
 import {
   provisionPartnerMailDomain,
@@ -1914,7 +1915,7 @@ router.get("/partner/clients/:clerkId/config", requireAuth, async (req, res): Pr
  * references (numbers, knowledge base, WhatsApp credentials, calendar/IVR ids,
  * call stats) are stripped and must be re-linked in the client's workspace.
  */
-router.post("/partner/clients/:clerkId/agents", requireAuth, async (req, res): Promise<void> => {
+router.post("/partner/clients/:clerkId/agents", requireAuth, requireAgentEditAccess, async (req, res): Promise<void> => {
   try {
     const partner = await requireActivePartner(req, res);
     if (!partner) return;

@@ -28,6 +28,7 @@ import {
   sanitizeJobs,
   type AssistantJob,
 } from "../services/assistant-jobs.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 
 const router = Router();
 
@@ -728,7 +729,7 @@ const TOP_LEVEL_FIELDS = new Set([
   "backchannelingEnabled", "contextWindowTurns", "noiseCancellationEnabled",
 ]);
 
-router.post("/assistant/apply", async (req: Request, res: Response): Promise<void> => {
+router.post("/assistant/apply", requireAgentEditAccess, async (req: Request, res: Response): Promise<void> => {
   const clerkUserId = (req as any).clerkUserId as string;
   if (!clerkUserId) { res.status(401).json({ error: "Unauthorized" }); return; }
 

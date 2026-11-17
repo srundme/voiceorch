@@ -51,9 +51,14 @@ router.get("/account", requireAuth, clientContext, async (req, res): Promise<voi
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   const { getUserConcurrentLimit } = await import("../services/workflow-dial-queue.js");
   const effectiveLimit = await getUserConcurrentLimit(clerkId);
+  const { isAgentEditAllowed, isImpersonatedRequest } = await import("../lib/agent-edit-access.js");
+  const actingPartner = (req as unknown as { actingPartnerClerkId?: string }).actingPartnerClerkId;
+  const agentEditAllowed = isImpersonatedRequest(req)
+    || ((await isAgentEditAllowed(clerkId)) && (!actingPartner || (await isAgentEditAllowed(actingPartner))));
   res.json({
     ...toAccountInfo(user),
     concurrentLimit: effectiveLimit,
+    agentEditAllowed,
   });
 });
 

@@ -23,6 +23,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import { getAuth } from "../lib/auth-compat.js";
 import {
   buildCallEndedWebhookPayload,
@@ -186,7 +187,7 @@ import { generateAndStoreOtp, verifyDestinationOtp } from "../services/phone-otp
 
 /* ── POST /calls/outbound ─────────────────────────────────────────────────── */
 
-router.post("/calls/outbound", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/calls/outbound", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const { userId } = getAuth(req);
   const parsed = InitiateOutboundCallBody.passthrough().safeParse(req.body);
   if (!parsed.success) {

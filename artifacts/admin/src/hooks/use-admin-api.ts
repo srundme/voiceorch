@@ -802,6 +802,21 @@ export function useSaveManagedOutboundTrial() {
   });
 }
 
+export function useSetUserAgentEdit(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { allowed: boolean }) =>
+      adminFetch<{ agentEditAllowed: boolean }>(`/users/${clerkId}/agent-edit`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
 export function useSetUserUnlimitedTrial(clerkId: string) {
   const queryClient = useQueryClient();
   return useMutation({

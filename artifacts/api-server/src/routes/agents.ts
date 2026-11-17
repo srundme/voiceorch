@@ -38,6 +38,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { clientContext } from "../middlewares/clientContext.js";
+import { requireAgentEditAccess } from "../lib/agent-edit-access.js";
 import { logActivity } from "../lib/activity.js";
 import { encryptKey, decryptKey } from "../lib/crypto.js";
 import {
@@ -177,7 +178,7 @@ router.get("/agents", requireAuth, clientContext, async (req, res): Promise<void
   res.json(ListAgentsResponse.parse(valid));
 });
 
-router.post("/agents", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const { scope } = await workspaceOwned(clerkId);
   if (rejectReadOnly(res, scope.canWrite)) return;
@@ -452,7 +453,7 @@ router.get("/agents/:id", requireAuth, clientContext, async (req, res): Promise<
   res.json(GetAgentResponse.parse(prepareAgentForResponse(agent, sourceIdMap.get(agent.id) ?? [])));
 });
 
-router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.patch("/agents/:id", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = UpdateAgentParams.safeParse(req.params);
@@ -654,7 +655,7 @@ router.patch("/agents/:id", requireAuth, clientContext, async (req, res): Promis
   })();
 });
 
-router.delete("/agents/:id", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.delete("/agents/:id", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = DeleteAgentParams.safeParse(req.params);
@@ -1026,7 +1027,7 @@ router.get("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async
 });
 
 // Write operator / CRM facts so the next call uses them as ground truth.
-router.post("/agents/:id/caller-memory/:phone/facts", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/:id/caller-memory/:phone/facts", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
 
@@ -1066,7 +1067,7 @@ router.post("/agents/:id/caller-memory/:phone/facts", requireAuth, clientContext
 });
 
 // Delete an entire fact key (current + entire supersession chain) for a caller
-router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const factId  = parseInt(String(req.params["factId"] ?? ""), 10);
@@ -1109,7 +1110,7 @@ router.delete("/agents/:id/caller-memory/:phone/facts/:factId", requireAuth, cli
  *          caller_sentences, caller_facts, caller_call_archive.
  * Keeps: caller_profiles (identity row preserved; next call starts clean).
  */
-router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.delete("/agents/:id/caller-memory/:phone", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   const agentId = parseInt(String(req.params["id"] ?? ""), 10);
   const rawPhone = decodeURIComponent(String(req.params["phone"] ?? ""));
@@ -1195,7 +1196,7 @@ router.get("/agents/:id/snapserve-executions", requireAuth, clientContext, async
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.patch("/agents/:id/toggle", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.patch("/agents/:id/toggle", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   const clerkId = (req as any).clerkUserId as string;
   if (rejectReadOnly(res, (await workspaceOwned(clerkId)).scope.canWrite)) return;
   const params = ToggleAgentParams.safeParse(req.params);
@@ -1314,7 +1315,7 @@ function getRazorpayClient(): Razorpay | null {
 }
 
 // POST /agents/upgrade-order — create Razorpay INR order for +1 agent slot
-router.post("/agents/upgrade-order", requireAuth, clientContext, async (req, res): Promise<void> => {
+router.post("/agents/upgrade-order", requireAuth, clientContext, requireAgentEditAccess, async (req, res): Promise<void> => {
   try {
     const clerkId = (req as any).clerkUserId as string;
     const rzp = getRazorpayClient();
