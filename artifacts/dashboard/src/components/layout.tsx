@@ -851,7 +851,10 @@ function MobileBottomNav({ onNewAgent }: { onNewAgent?: () => void }) {
 function AgentEditRestrictedBanner() {
   return (
     <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30">
-      <span className="text-[12.5px] text-amber-800 dark:text-amber-300">{AGENT_EDIT_RESTRICTED_MESSAGE}</span>
+      <span className="text-[12.5px] text-amber-800 dark:text-amber-300">
+        {AGENT_EDIT_RESTRICTED_MESSAGE}{" "}
+        <span className="font-semibold">Please don&apos;t add any new money to your wallet.</span>
+      </span>
     </div>
   );
 }
