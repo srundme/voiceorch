@@ -133,6 +133,13 @@ export function useAgentEditRestricted(): boolean {
   return (account as { agentEditAllowed?: boolean } | undefined)?.agentEditAllowed === false;
 }
 
+/** Admin-set message for this account, shown as a dashboard banner. */
+export function useAccountNotice(): string | null {
+  const { data: account } = useGetAccount();
+  const notice = (account as { accountNotice?: string | null } | undefined)?.accountNotice;
+  return notice && notice.trim() ? notice.trim() : null;
+}
+
 export function useIsPartnerReadOnly(): boolean {
   const { data: partnerCtx } = usePartnerContext();
   const restricted = useAgentEditRestricted();

@@ -22,6 +22,7 @@ import {
   usePlatformEmails,
   useSetUserUnlimitedTrial,
   useSetUserAgentEdit,
+  useSetUserNotice,
   useUser360,
 } from "@/hooks/use-admin-api";
 import { formatCentsToDollars, formatDuration, adminFetch } from "@/lib/api";
@@ -69,6 +70,8 @@ export default function UserDetail() {
   const setConcurrentLimit = useSetConcurrentLimit(clerkId || "");
   const setUnlimitedTrial = useSetUserUnlimitedTrial(clerkId || "");
   const setAgentEdit = useSetUserAgentEdit(clerkId || "");
+  const setNotice = useSetUserNotice(clerkId || "");
+  const [noticeDraft, setNoticeDraft] = useState<string | null>(null);
   const setStatus = useSetUserStatus(clerkId || "");
   const unlockPortalLogin = useUnlockPortalLogin(clerkId || "");
   const editProfile = useEditUserProfile(clerkId || "");
@@ -650,6 +653,45 @@ export default function UserDetail() {
                 <Badge variant={(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "default" : "outline"} className={(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "bg-emerald-600" : ""}>
                   {(user as { agentEditAllowed?: boolean }).agentEditAllowed ? "Allowed" : "View only"}
                 </Badge>
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Banner message for this account
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Textarea
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Shown at the top of this user's dashboard. Leave empty for none."
+                  value={noticeDraft ?? ((user as { accountNotice?: string | null }).accountNotice ?? "")}
+                  onChange={(e) => setNoticeDraft(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={setNotice.isPending || noticeDraft === null}
+                    onClick={() => setNotice.mutate({ notice: noticeDraft }, {
+                      onSuccess: () => { setNoticeDraft(null); toast({ title: "Banner saved" }); },
+                      onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                    })}
+                  >
+                    Save banner
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={setNotice.isPending || !(user as { accountNotice?: string | null }).accountNotice}
+                    onClick={() => setNotice.mutate({ notice: null }, {
+                      onSuccess: () => { setNoticeDraft(null); toast({ title: "Banner removed" }); },
+                      onError: (e) => toast({ title: "Failed", description: formatApiError(e), variant: "destructive" }),
+                    })}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </CardContent>
             </Card>
             <Card className="md:col-span-3">

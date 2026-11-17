@@ -802,6 +802,20 @@ export function useSaveManagedOutboundTrial() {
   });
 }
 
+export function useSetUserNotice(clerkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { notice: string | null }) =>
+      adminFetch<{ accountNotice: string | null }>(`/users/${clerkId}/notice`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", clerkId] });
+    },
+  });
+}
+
 export function useSetUserAgentEdit(clerkId: string) {
   const queryClient = useQueryClient();
   return useMutation({
